@@ -3,10 +3,14 @@ from src.dataset.HTSATdataset import HTSATdataset
 from torch import nn
 import torch
 from torchvision.models.swin_transformer import PatchMergingV2, SwinTransformerBlockV2
+from util.Stat import Stat
+import logging
+import numpy as np
 class HTSAT(pl.LightningModule):
     def __init__(self,class_num: int):
         super().__init__()
         self.class_num = class_num
+        self.validation_step_outputs = []
         # B,C,H,W()
         self.patch_embed = nn.Conv2d(
             in_channels=1,
@@ -89,12 +93,6 @@ class HTSAT(pl.LightningModule):
         y = self(log_mel)
         loss = torch.nn.functional.cross_entropy(y,target.float())
 
-        # 计算准确率
-        preds = torch.argmax(y, dim=1)
-        true_labels = torch.argmax(target, dim=1)
-        acc = (preds == true_labels).float().mean()
-        self.log("train_loss", loss, prog_bar=True)
-        self.log("train_acc", acc, prog_bar=True)
         return loss
 
 
@@ -104,16 +102,43 @@ class HTSAT(pl.LightningModule):
         target = batch["target"]
 
         y = self(log_mel)
-        loss = torch.nn.functional.cross_entropy(y, target)
-
+        # loss = torch.nn.functional.cross_entropy(y, target)
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(y, target)
         # 计算准确率
         preds = torch.argmax(y, dim=1)
         true_labels = torch.argmax(target, dim=1)
         acc = (preds == true_labels).float().mean()
 
-        self.log("val_loss", loss, prog_bar=True)
-        self.log("val_acc", acc, prog_bar=True)
-        return loss
+        # self.log("val_loss", loss, prog_bar=True)
+        # self.log("val_acc", acc, prog_bar=True)
+        
+        output = {"target":target,"y":y}
+        self.validation_step_outputs.append(output)
+        return loss 
+    
+    def on_validation_epoch_end(self):
+        y = torch.cat(
+            [output["y"] for output in self.validation_step_outputs],
+            dim=0
+        )
+        target = torch.cat(
+            [output["target"] for output in self.validation_step_outputs],
+            dim=0
+        )
+        loss = torch.nn.functional.binary_cross_entropy_with_logits(y, target)
+        stats = Stat.calculate_stats(output=y.detach().cpu().numpy(),
+                                     target=target.detach().cpu().numpy())
+        self.log("val_loss",loss)
+        self.log("val_acc",stats[0]["acc"])
+        self.log("mAP",np.mean([stat["AP"] for stat in stats]))
+        logging.getLogger("lightning.pytorch").info(
+                f'Epoch:{self.current_epoch:03d}\tmAP:{np.mean([stat["AP"] for stat in stats])}'
+            )
+        for stat in stats:
+            logging.getLogger("lightning.pytorch").info(
+                f'class_index:{stat["class_index"]:03d}\tAP:{stat["AP"]:.4f}\tauc:{stat["auc"]:.4f}\tacc{stat["acc"]:.4f}\tval_loss:{loss:.4f}'
+            )
+        self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         # 1. 优化器配置 (AdamW)
@@ -150,3 +175,18 @@ class HTSAT(pl.LightningModule):
                 "frequency": 1,
             }
         }
+        
+        
+    def setup(self, stage):
+        if stage == "fit" and self.example_input_array is None:
+            # 获取验证集的第一个 batch
+            val_dataloader = self.trainer.datamodule.val_dataloader()
+            batch = next(iter(val_dataloader))
+            log_mel = batch["log_mel"]
+            target = batch["target"]
+            # 假设输入是 batch 的第一个元素（根据你的数据格式调整）
+            self.example_input_array = log_mel  # 取第一个样本，并增加 batch 维度
+            
+    def on_train_start(self):
+        self.csv_logger = next(logger for logger in self.loggers if logger.name == "csv")
+        self.tensorboard_logger = next(logger for logger in self.loggers if logger.name == "tensorboard")

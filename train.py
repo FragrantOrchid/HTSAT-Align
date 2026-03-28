@@ -5,7 +5,10 @@ from src.model.HTSAT import HTSAT
 from src.dataset.HTSATdataset import HTSATdataset
 import argparse
 from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import TensorBoardLogger
 import os
+import logging
+
 parser = argparse.ArgumentParser(description='程序描述')
 parser.add_argument("-train_file")
 parser.add_argument("-val_file")
@@ -40,13 +43,19 @@ trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     devices=1,
     # precision="16-mixed",  # 关键：启用混合精度
-    max_epochs=100,
+    max_epochs=25,
     callbacks=[checkpoint_callback],
     log_every_n_steps=10,
-    enable_progress_bar=False,
+    enable_progress_bar=True,
     default_root_dir=args.export_path,
-    logger=CSVLogger(save_dir=args.export_path,name="",version="")
+    logger=[
+        CSVLogger(save_dir=args.export_path,name="csv",version=""),
+        TensorBoardLogger(save_dir=args.export_path,name="tensorboard",version="",log_graph=True,)
+    ]
 )
-
+logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
+logging.getLogger("lightning.pytorch").addHandler(
+    logging.FileHandler(os.path.join(args.export_path,"lightning.pytorch.log"))
+)
 # 4. 开始训练
 trainer.fit(model, datamodule=data_module)

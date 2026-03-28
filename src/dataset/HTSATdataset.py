@@ -58,7 +58,7 @@ class HTSATdataset(pl.LightningDataModule):
         #TODO 后期改成pandas来提供查找操作
         def __getitem__(self, index):
             filename = self.data[index]['wav']
-            filelabels = self.data[index]['labels']
+            filelabels = self.data[index]['labels'].split(',')
 
             waveform, sr = torchaudio.load(filename, format="wav")
             waveform = waveform.mean(dim=0, keepdim=True)
@@ -87,11 +87,12 @@ class HTSATdataset(pl.LightningDataModule):
                 snip_edges=False
             )
             fbank = fbank.permute(1,0).unsqueeze(0)
-
-            label_index = self.labels.loc[self.labels["mid"] == filelabels].iloc[0]["index"]
-            label_index = int(label_index)
+            # 多类别兼容
+            label_indexs = self.labels.loc[self.labels["mid"].isin(filelabels)]["index"].tolist()
             target = np.zeros(len(self.labels))
-            target[label_index] = 1.0
+            for label_index in label_indexs:
+                label_index = int(label_index)
+                target[label_index] = 1.0
             target = torch.FloatTensor(target)# .unsqueeze(0)
             
             return {"log_mel"   :   log_mel, # Tendor shape torch.Size([1, 64, 800])
