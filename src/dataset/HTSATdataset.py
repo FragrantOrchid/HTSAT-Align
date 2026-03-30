@@ -20,7 +20,7 @@ class HTSATdataset(pl.LightningDataModule):
         dataset =  self.HTSATsubdataset(self.train_file,self.label_vsc,self.sound_length)
         return DataLoader(
             dataset,
-            batch_size=100,  # 设置 batch_size
+            batch_size=60,  # 设置 batch_size
             shuffle=True,  # 训练集需要 shuffle
             num_workers=4,  # 多线程加载数据
             pin_memory=True,  # 如果使用 GPU，可以加速数据传输
@@ -29,7 +29,7 @@ class HTSATdataset(pl.LightningDataModule):
         dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length)
         return DataLoader(
             dataset,
-            batch_size=100,  # 验证集 batch_size 可以相同或不同
+            batch_size=60,  # 验证集 batch_size 可以相同或不同
             shuffle=False,  # 验证集不需要 shuffle
             num_workers=4,
             pin_memory=True,

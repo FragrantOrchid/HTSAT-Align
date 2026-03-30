@@ -6,6 +6,7 @@ from src.dataset.HTSATdataset import HTSATdataset
 import argparse
 from pytorch_lightning.loggers import CSVLogger
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import TQDMProgressBar
 import os
 import logging
 
@@ -43,8 +44,11 @@ trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     devices=1,
     # precision="16-mixed",  # 关键：启用混合精度
-    max_epochs=25,
-    callbacks=[checkpoint_callback],
+    max_epochs=50,
+    callbacks=[
+        checkpoint_callback,
+        TQDMProgressBar(refresh_rate=200)
+    ],
     log_every_n_steps=10,
     enable_progress_bar=True,
     default_root_dir=args.export_path,
