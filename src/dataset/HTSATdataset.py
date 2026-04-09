@@ -7,20 +7,23 @@ import csv
 import numpy as np
 import torch
 import pandas as pd
+import librosa
+from util.Parsel import get_matrix
 class HTSATdataset(pl.LightningDataModule):
     # sound_length 单位为秒
-    def __init__(self, train_file, val_file, label_csv, sound_length: int):
+    def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size):
         super().__init__()
         self.train_file = train_file
         self.val_file = val_file
         self.label_vsc = label_csv
         self.sound_length = sound_length
+        self.batch_size = batch_size
 
     def train_dataloader(self):
         dataset =  self.HTSATsubdataset(self.train_file,self.label_vsc,self.sound_length)
         return DataLoader(
             dataset,
-            batch_size=60,  # 设置 batch_size
+            batch_size=self.batch_size,  # 设置 batch_size
             shuffle=True,  # 训练集需要 shuffle
             num_workers=4,  # 多线程加载数据
             pin_memory=True,  # 如果使用 GPU，可以加速数据传输
@@ -29,7 +32,7 @@ class HTSATdataset(pl.LightningDataModule):
         dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length)
         return DataLoader(
             dataset,
-            batch_size=60,  # 验证集 batch_size 可以相同或不同
+            batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
             shuffle=False,  # 验证集不需要 shuffle
             num_workers=4,
             pin_memory=True,
@@ -55,6 +58,22 @@ class HTSATdataset(pl.LightningDataModule):
 
         def __len__(self):
             return len(self.data)
+        def get_entropy(self, filename):
+            y, sr = librosa.load(filename, sr=48000)
+            if np.max(np.abs(y)) < 1e-6:  # 静音检测
+                return torch.tensor(0.0, dtype=torch.float32)  # 静音时返回 0 或其他默认值
+            
+            S = librosa.stft(y, n_fft=256)
+            power_spectrum = np.abs(S) ** 2
+            power_sum = np.sum(power_spectrum)
+            
+            if power_sum < 1e-10:
+                spectral_prob = np.ones_like(power_spectrum) / len(power_spectrum)
+            else:
+                spectral_prob = power_spectrum / power_sum
+            
+            entropy = -np.sum(spectral_prob * np.log2(spectral_prob + 1e-10))
+            return torch.tensor(float(entropy), dtype=torch.float32)
         #TODO 后期改成pandas来提供查找操作
         def __getitem__(self, index):
             filename = self.data[index]['wav']
@@ -96,6 +115,8 @@ class HTSATdataset(pl.LightningDataModule):
             target = torch.FloatTensor(target)# .unsqueeze(0)
             
             return {"log_mel"   :   log_mel, # Tendor shape torch.Size([1, 64, 800])
+                    "entropy"   :   self.get_entropy(filename=filename),
                     "fbank"     :   fbank,
+                    "vowel"     :   torch.FloatTensor(get_matrix(filename)), # Weight,Height
                     "target"    :   target}
 
