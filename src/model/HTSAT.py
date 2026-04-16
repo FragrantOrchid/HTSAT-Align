@@ -13,28 +13,22 @@ from sklearn import metrics
 from src.layer.ScalarFilayer import ScalarFiLMLayer
 from torchlibrosa.augmentation import SpecAugmentation
 class HTSAT(pl.LightningModule):
-    def __init__(self, class_num: int, entropy_film: bool):
+    def __init__(self, class_num: int, entropy_film: bool, vowel_embed: bool, sound_length: int):
         super().__init__()
-        self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=2,freq_drop_width=8,freq_stripes_num=2)
         self.class_num = class_num
-        self.outputs = {
-            "y": None,
-            "target": None
-        }
-        # B,C,Width,Height
-        # Input: B,1,sound_length*160,11
-        # Output: B,1,sound_length*160,64
-        self.vowel_padding = nn.Linear(in_features=11,out_features=64)
+        self.entropy_film = entropy_film
+        self.vowel_embed = vowel_embed
+        self.sound_length = sound_length
+        self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
+        if self.vowel_embed:
+            # B,C,Width,Height
+            # Input: B,1,sound_length*160,16
+            # Output: B,1,sound_length*160,64
+            self.vowel_padding = nn.Linear(in_features=10,out_features=64)
         # B,C,H,W()
-        # Input: B,1,64,sound_length*160
+        # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
-        self.patch_embed = nn.Conv2d(
-            in_channels=1,
-            out_channels=96,
-            kernel_size=(4,1),
-            stride=(4,1),
-            padding=0
-        )
+        self.patch_embed = nn.Conv2d(in_channels=2 if self.vowel_embed else 1,out_channels=96,kernel_size=(4,1),stride=(4,1),padding=0)
         # all use B,H,W,C 
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
@@ -57,14 +51,18 @@ class HTSAT(pl.LightningModule):
             padding=1
         )
         self.avg = nn.AdaptiveAvgPool1d(1) # B,C,sequence_length -> B,C,1
-        if entropy_film:
+        if self.entropy_film:
             self.film = ScalarFiLMLayer(num_channel=class_num,hidden_dim=96*4)
 
     def forward(self,x,entropy,vowel):
         # 扩展元音表
-        vowel = vowel.unsqueeze(1)
-        vowel = self.vowel_padding(vowel)
-        vowel = vowel.permute(0,1,3,2) # B,1,64,sound_length*160
+        if self.vowel_embed:
+            vowel = vowel.unsqueeze(1)
+            vowel = self.vowel_padding(vowel)
+            vowel = vowel.permute(0,1,3,2) # B,1,64,sound_length*160
+            x = (x-x.mean()) / x.std()
+            vowel = (vowel - vowel.mean()) / vowel.std()
+            x = torch.cat([vowel,x],dim=1)
         # x: B,C,H,W
         patch_tokens = self.patch_embed(x) # B,C,H,W
         patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
@@ -90,22 +88,21 @@ class HTSAT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         log_mel = self.spec_aug(batch["log_mel"])
         target = batch["target"]
-        entropy = batch["entropy"]
-        vowel = batch["vowel"]
+        entropy = batch["entropy"] if self.entropy_film else None
+        vowel = batch["vowel"] if self.vowel_embed else None
 
         y = self(log_mel,entropy,vowel)
-        # 损失函数自带sigmoid归(0,1)，输出可视化是需要自行sigmoid
         loss = torch.nn.functional.binary_cross_entropy(y,target.float())
         # 累积日志
-        self.outputs["y"] = y if self.outputs["y"] is None else torch.cat((self.outputs["y"],y),dim=0)
-        self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
+        # self.outputs["y"] = y if self.outputs["y"] is None else torch.cat((self.outputs["y"],y),dim=0)
+        # self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
         return loss
 
     def validation_step(self, batch, batch_idx):
         log_mel = batch["log_mel"]
         target = batch["target"]
-        entropy = batch["entropy"]
-        vowel = batch["vowel"]
+        entropy = batch["entropy"] if self.entropy_film else None
+        vowel = batch["vowel"] if self.vowel_embed else None
 
         y = self(log_mel,entropy,vowel)
         # 损失函数
@@ -153,7 +150,7 @@ class HTSAT(pl.LightningModule):
         }
         
     # 初始化样例输入  
-    """
+        """
     def setup(self, stage):
         if stage == "fit" and self.example_input_array is None:
             # 获取验证集的第一个 batch
@@ -161,9 +158,11 @@ class HTSAT(pl.LightningModule):
             batch = next(iter(val_dataloader))
             log_mel = batch["log_mel"]
             target = batch["target"]
+            entropy = batch["entropy"]
+            vowel = batch["vowel"]
             # 假设输入是 batch 的第一个元素（根据你的数据格式调整）
-            self.example_input_array = log_mel  # 取第一个样本，并增加 batch 维度
-            """
+            self.example_input_array = (log_mel,entropy,vowel)
+        """
     def on_validation_epoch_start(self):
         self.outputs = {
             "y": None,
@@ -171,10 +170,10 @@ class HTSAT(pl.LightningModule):
         }
     def on_validation_epoch_end(self):
         y = self.outputs["y"]
-        target = self.outputs["target"]
+        target = self.outputs["target"]  
         loss = torch.nn.functional.binary_cross_entropy(y, target)
         # numpy
-        y = torch.sigmoid(y).detach().cpu().numpy()
+        y = y.detach().cpu().numpy()
         target = target.detach().cpu().numpy().astype(int)
         # calculate
         acc = metrics.accuracy_score(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
@@ -199,8 +198,4 @@ class HTSAT(pl.LightningModule):
             logging.getLogger("lightning.pytorch").info(
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
-        self.outputs = {
-            "y": None,
-            "target": None
-        }
     

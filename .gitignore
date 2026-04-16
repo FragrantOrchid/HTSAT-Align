@@ -5,3 +5,5 @@ __pycache__
 /.vscode
 /testbench
 /train.sh
+/slurm*
+/run.sh

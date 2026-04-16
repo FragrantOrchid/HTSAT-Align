@@ -3,24 +3,31 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import json
 import torchaudio
-import csv
 import numpy as np
 import torch
 import pandas as pd
-import librosa
-from util.Parsel import get_matrix
+from util.GaussianVowel import getMatrix
+import torch
+import torchaudio
+import torchlibrosa as tl
+from functools import lru_cache
+import logging
+from joblib import Memory
+memory = Memory(location='~/.cache', verbose=0)
 class HTSATdataset(pl.LightningDataModule):
     # sound_length 单位为秒
-    def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size):
+    def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size, entropy_film: bool, vowel_embed: bool):
         super().__init__()
         self.train_file = train_file
         self.val_file = val_file
         self.label_vsc = label_csv
         self.sound_length = sound_length
         self.batch_size = batch_size
+        self.entropy_film=entropy_film
+        self.vowel_embed=vowel_embed
 
     def train_dataloader(self):
-        dataset =  self.HTSATsubdataset(self.train_file,self.label_vsc,self.sound_length)
+        dataset =  self.HTSATsubdataset(self.train_file,self.label_vsc,self.sound_length,self.entropy_film,self.vowel_embed)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,  # 设置 batch_size
@@ -29,7 +36,7 @@ class HTSATdataset(pl.LightningDataModule):
             pin_memory=True,  # 如果使用 GPU，可以加速数据传输
         )
     def val_dataloader(self):
-        dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length)
+        dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length,self.entropy_film,self.vowel_embed)
         return DataLoader(
             dataset,
             batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
@@ -38,7 +45,7 @@ class HTSATdataset(pl.LightningDataModule):
             pin_memory=True,
         )
     class HTSATsubdataset(Dataset):
-        def __init__(self,datafile,label_csv,sound_length):
+        def __init__(self,datafile,label_csv,sound_length, entropy_film: bool, vowel_embed: bool):
             self.sound_length = sound_length
             # 需要精准的时间映射，横向需要是以0.1s分割的，或者其倍数
             # 暂时每100ms分16份
@@ -53,70 +60,93 @@ class HTSATdataset(pl.LightningDataModule):
             )
             self.labels = pd.read_csv(label_csv)
 
+            self.entropy_film=entropy_film
+            self.vowel_embed=vowel_embed
+
             with open(datafile, 'r') as file:
                 self.data = json.load(file)['data']
 
         def __len__(self):
             return len(self.data)
-        def get_entropy(self, filename):
-            y, sr = librosa.load(filename, sr=48000)
-            if np.max(np.abs(y)) < 1e-6:  # 静音检测
-                return torch.tensor(0.0, dtype=torch.float32)  # 静音时返回 0 或其他默认值
-            
-            S = librosa.stft(y, n_fft=256)
-            power_spectrum = np.abs(S) ** 2
-            power_sum = np.sum(power_spectrum)
-            
-            if power_sum < 1e-10:
-                spectral_prob = np.ones_like(power_spectrum) / len(power_spectrum)
-            else:
-                spectral_prob = power_spectrum / power_sum
-            
-            entropy = -np.sum(spectral_prob * np.log2(spectral_prob + 1e-10))
-            return torch.tensor(float(entropy), dtype=torch.float32)
-        #TODO 后期改成pandas来提供查找操作
-        def __getitem__(self, index):
-            filename = self.data[index]['wav']
-            filelabels = self.data[index]['labels'].split(',')
 
-            waveform, sr = torchaudio.load(filename, format="wav")
-            waveform = waveform.mean(dim=0, keepdim=True)
-            waveform = torchaudio.functional.resample(waveform,sr,32000)
-            waveform = waveform - waveform.mean()
-            # 规范声音长度到：采样率*目标长度
-            current_length = waveform.shape[-1]
-            if current_length < self.sound_length*32000:
-                waveform = torch.nn.functional.pad(
-                    waveform,
-                    (0,self.sound_length*32000-current_length),
-                    mode='constant',
-                    value=0
-                )
-            elif current_length > self.sound_length*32000:
-                waveform = waveform[...,:self.sound_length*32000]
-            # 特征提取
-            log_mel = torchaudio.transforms.AmplitudeToDB()(self.mel_spec(waveform))
-            fbank = torchaudio.compliance.kaldi.fbank(
-                waveform=waveform,
-                sample_frequency=32000,
-                num_mel_bins=64,
-                frame_length=150.0/16,
-                frame_shift=100.0/16,
-                window_type="hanning",
-                snip_edges=False
-            )
-            fbank = fbank.permute(1,0).unsqueeze(0)
-            # 多类别兼容
+        def get_target(self, index):
+            filelabels = self.data[index]['labels'].split(',')
             label_indexs = self.labels.loc[self.labels["mid"].isin(filelabels)]["index"].tolist()
             target = np.zeros(len(self.labels))
             for label_index in label_indexs:
                 label_index = int(label_index)
                 target[label_index] = 1.0
             target = torch.FloatTensor(target)# .unsqueeze(0)
-            
-            return {"log_mel"   :   log_mel, # Tendor shape torch.Size([1, 64, 800])
-                    "entropy"   :   self.get_entropy(filename=filename),
-                    "fbank"     :   fbank,
-                    "vowel"     :   torch.FloatTensor(get_matrix(filename)), # Weight,Height
-                    "target"    :   target}
+            return target
+        @memory.cache
+        def get_vowel(filename):
+            return torch.FloatTensor(getMatrix(filename=filename))
+        @memory.cache
+        def get_log_mel(filename, sound_length):
+            # 加载与重采样
+            waveform, sr = torchaudio.load(filename, format="wav")
+            waveform = waveform.mean(dim=0, keepdim=True)
+            waveform = torchaudio.functional.resample(waveform,sr,32000)
+            waveform = waveform - waveform.mean()
+            # 规范声音长度到：采样率*目标长度
+            current_length = waveform.shape[-1]
+            if current_length < sound_length*32000:
+                waveform = torch.nn.functional.pad(
+                    waveform,
+                    (0,sound_length*32000-current_length),
+                    mode='constant',
+                    value=0
+                )
+            elif current_length > sound_length*32000:
+                waveform = waveform[...,:sound_length*32000]
+            # 对数梅尔特征
+            mel_spec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=32000,
+                center=False,
+                pad=150,
+                hop_length=200, # 0.1*sampel_rate/16
+                win_length=500,
+                n_fft=500,
+                n_mels=64
+            )
+            return torchaudio.transforms.AmplitudeToDB()(mel_spec(waveform))
+        @memory.cache
+        def get_entry(filename):
+            # 加载与重采样
+            waveform, sr = torchaudio.load(filename, format="wav")
+            waveform = waveform.mean(dim=0, keepdim=True)
+            waveform = torchaudio.functional.resample(waveform,sr,32000)
+            waveform = waveform - waveform.mean()
+            stft = torch.stft(
+                input=waveform,
+                n_fft=256,
+                center=True,
+                normalized=False,
+                onesided=True,
+                return_complex=True,
+                window=torch.hann_window(256)
+            )
+            power_spectrum = torch.abs(stft) ** 2
+            power_sum = torch.sum(power_spectrum)
+            if power_sum < 1e-10:
+                spectral_prob = torch.ones_like(power_spectrum) / power_spectrum.numel()
+            else:
+                spectral_prob = power_spectrum / power_sum
+            log_prob = torch.log2(spectral_prob + 1e-10)
+            entropy = -torch.sum(spectral_prob * log_prob)
+        
+        def __getitem__(self, index):
+            filename = self.data[index]['wav']
+            result = {}
+            # 常规特征
+            result["target"] = self.get_target(index)
+            result["log_mel"] = self.get_log_mel(filename=filename,sound_length=self.sound_length)
+            # 能量谱熵特征
+            if self.entropy_film:
+                result["entropy"] = self.get_entry(filename)
+            # 元音特征
+            if self.vowel_embed:
+                result["vowel"] = self.get_vowel(filename)
+
+            return result
 
