@@ -3,12 +3,8 @@ from src.dataset.HTSATdataset import HTSATdataset
 from torch import nn
 import torch
 from torchvision.models.swin_transformer import PatchMergingV2, SwinTransformerBlockV2
-from util.Stat import Stat
 import logging
 import numpy as np
-import gc
-import psutil
-import os
 from sklearn import metrics
 from src.layer.ScalarFilayer import ScalarFiLMLayer
 from torchlibrosa.augmentation import SpecAugmentation
@@ -24,7 +20,7 @@ class HTSAT(pl.LightningModule):
             # B,C,Width,Height
             # Input: B,1,sound_length*160,16
             # Output: B,1,sound_length*160,64
-            self.vowel_padding = nn.Linear(in_features=10,out_features=64)
+            self.vowel_padding = nn.Linear(in_features=12,out_features=64)
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
@@ -55,12 +51,12 @@ class HTSAT(pl.LightningModule):
             self.film = ScalarFiLMLayer(num_channel=class_num,hidden_dim=96*4)
 
     def forward(self,x,entropy,vowel):
+        x = (x-x.mean()) / x.std()
         # 扩展元音表
         if self.vowel_embed:
             vowel = vowel.unsqueeze(1)
             vowel = self.vowel_padding(vowel)
             vowel = vowel.permute(0,1,3,2) # B,1,64,sound_length*160
-            x = (x-x.mean()) / x.std()
             vowel = (vowel - vowel.mean()) / vowel.std()
             x = torch.cat([vowel,x],dim=1)
         # x: B,C,H,W

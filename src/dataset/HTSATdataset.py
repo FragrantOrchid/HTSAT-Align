@@ -1,19 +1,15 @@
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 import json
-import torchaudio
 import numpy as np
-import torch
+import torch, torchaudio
 import pandas as pd
-from util.GaussianVowel import getMatrix
-import torch
-import torchaudio
-import torchlibrosa as tl
-from functools import lru_cache
+from util.PetersonBarneyGaussian import getMatrix as getPetersonBarneyGaussianMatrix
+from util.HillenbrandGaussian import getMatrix as getHillenbrandGaussianMatrix
 import logging
 from joblib import Memory
-memory = Memory(location='~/.cache', verbose=0)
+memory = Memory(location='/users/u220110626/.cache', verbose=0, mmap_mode='r')
+# memory.clear(warn=False)
 class HTSATdataset(pl.LightningDataModule):
     # sound_length 单位为秒
     def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size, entropy_film: bool, vowel_embed: bool):
@@ -39,7 +35,7 @@ class HTSATdataset(pl.LightningDataModule):
         dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length,self.entropy_film,self.vowel_embed)
         return DataLoader(
             dataset,
-            batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
+            batch_size=self.batch_size*12000*14,  # 验证集 batch_size 可以相同或不同
             shuffle=False,  # 验证集不需要 shuffle
             num_workers=4,
             pin_memory=True,
@@ -47,6 +43,8 @@ class HTSATdataset(pl.LightningDataModule):
     class HTSATsubdataset(Dataset):
         def __init__(self,datafile,label_csv,sound_length, entropy_film: bool, vowel_embed: bool):
             self.sound_length = sound_length
+            
+
             # 需要精准的时间映射，横向需要是以0.1s分割的，或者其倍数
             # 暂时每100ms分16份
             self.mel_spec = torchaudio.transforms.MelSpectrogram(
@@ -68,23 +66,26 @@ class HTSATdataset(pl.LightningDataModule):
 
         def __len__(self):
             return len(self.data)
-
-        def get_target(self, index):
+        # 这些函数，输出统一使用numpy,便于缓存
+        @memory.cache(ignore=["self","index"])
+        def get_target(self, index, filename):
             filelabels = self.data[index]['labels'].split(',')
             label_indexs = self.labels.loc[self.labels["mid"].isin(filelabels)]["index"].tolist()
             target = np.zeros(len(self.labels))
             for label_index in label_indexs:
                 label_index = int(label_index)
                 target[label_index] = 1.0
-            target = torch.FloatTensor(target)# .unsqueeze(0)
             return target
         @memory.cache
         def get_vowel(filename):
-            return torch.FloatTensor(getMatrix(filename=filename))
-        @memory.cache
+            # return torch.FloatTensor(getMatrix(filename=filename))
+            return getHillenbrandGaussianMatrix(filename=filename)
+        @memory.cache(ignore=["sound_length"])
         def get_log_mel(filename, sound_length):
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             # 加载与重采样
             waveform, sr = torchaudio.load(filename, format="wav")
+            waveform = waveform.to(device)
             waveform = waveform.mean(dim=0, keepdim=True)
             waveform = torchaudio.functional.resample(waveform,sr,32000)
             waveform = waveform - waveform.mean()
@@ -108,8 +109,8 @@ class HTSATdataset(pl.LightningDataModule):
                 win_length=500,
                 n_fft=500,
                 n_mels=64
-            )
-            return torchaudio.transforms.AmplitudeToDB()(mel_spec(waveform))
+            ).to(device)
+            return torchaudio.transforms.AmplitudeToDB()(mel_spec(waveform)).detach().cpu().numpy().copy()
         @memory.cache
         def get_entry(filename):
             # 加载与重采样
@@ -139,7 +140,7 @@ class HTSATdataset(pl.LightningDataModule):
             filename = self.data[index]['wav']
             result = {}
             # 常规特征
-            result["target"] = self.get_target(index)
+            result["target"] = self.get_target(index=index, filename=filename)
             result["log_mel"] = self.get_log_mel(filename=filename,sound_length=self.sound_length)
             # 能量谱熵特征
             if self.entropy_film:

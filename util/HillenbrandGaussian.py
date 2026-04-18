@@ -5,35 +5,51 @@ import torch
 import parselmouth
 import matplotlib.pyplot as plt
 from functools import lru_cache
-vowels_num = 10
+import pandas as pd
+import csv
+vowels_num = 12
 np.set_printoptions(
     threshold=np.inf,
     precision=4,
     linewidth=np.inf
 )
-# file_path = './data/verified_pb.data'
-file_path = './data/verified_pb.data'
-pb = []
-with open(file_path, 'r') as file:
-    for line in file:
-        columns = line.strip().split()
-        if len(columns) >= 8:
-            row = [
-                int(columns[2]),
-                int(columns[4].rstrip('.')),
-                int(columns[5].rstrip('.')),
-                int(columns[6].rstrip('.')),
-                int(columns[7].rstrip('.'))
-            ]
-            pb.append(row)
-            
-pb = np.array(pb)
-Y = pb[:,0]
-X = pb[:,1:]
+
+filename = "../data/hillenbrand-vowel-formatted.csv"
+map = {
+    "ae":1,
+    "ah":2,
+    "aw":3,
+    "eh":4,
+    "ei":5,
+    "er":6,
+    "ih":7,
+    "iy":8,
+    "oa":9,
+    "oo":10,
+    "uh":11,
+    "uw":12
+}
+result = []
+with open(filename, 'r') as file:
+    reader = csv.reader(file)
+    next(reader)  # 跳过标题行
+    for row in reader:
+        result.append([
+            map[row[1][-2:]],   # class
+            int(row[3]),        # f0
+            int(row[4]),        # f1
+            int(row[5]),        # f2
+            int(row[6]),        # f3
+            int(row[7])         # f4
+        ])
+        
+result = np.array(result)
+# print(len(result))
+Y = result[:,0]
+X = result[:,1:]
 
 clf = GaussianNB()
 clf.fit(X, Y)
-# result = clf.predict_proba(X)
 
 def getMatrix(filename):
     x = []
@@ -47,6 +63,7 @@ def getMatrix(filename):
             formants.get_value_at_time(1, time_point),
             formants.get_value_at_time(2, time_point),
             formants.get_value_at_time(3, time_point),
+            formants.get_value_at_time(4, time_point),
         ])
     x = np.array(x)
     mask = np.isnan(x).any(axis=1)
@@ -57,25 +74,3 @@ def getMatrix(filename):
     y = clf.predict_proba(x_vowel)
     result[~mask] = y
     return result
-
-"""
-filename = "/users/u220110626/SpeedCommandV2/left/32ad5b65_nohash_0.wav"
-matrix = getMatrix(filename=filename)
-# print(matrix)
-
-print(matrix)
-plt.figure(figsize=(8, 6))
-plt.imshow(matrix, cmap='viridis', origin='lower')
-plt.colorbar(label='Value')
-plt.title('2D Heatmap of Array')
-plt.xlabel('X Index')
-plt.ylabel('Y Index')
-plt.savefig("vowels.png")
-"""
-
-
-    
-
-    
-        
-
