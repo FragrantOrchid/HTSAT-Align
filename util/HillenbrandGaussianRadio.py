@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 from functools import lru_cache
 import pandas as pd
 import csv
+from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 vowels_num = 12
 np.set_printoptions(
     threshold=np.inf,
@@ -29,28 +32,58 @@ map = {
     "uh":11,
     "uw":12
 }
-result = []
+data = []
 with open(filename, 'r') as file:
     reader = csv.reader(file)
     next(reader)  # 跳过标题行
     for row in reader:
-        result.append([
+        data.append([
             map[row[1][-2:]],   # class
-            int(row[3]),        # f0
             int(row[4]),        # f1
-            int(row[5])# ,        # f2
-            # int(row[6]),        # f3
-            # int(row[7])         # f4
+            int(row[5]),
+            int(row[6])         # f3
         ])
         
-result = np.array(result)
-# print(len(result))
+data = np.array(data)
+
+data = data[~np.any(data == 0, axis = 1)]
+
+data_radio = []
+
+for row in data:
+    data_radio.append([
+        row[0],
+        row[1]/row[2],
+        row[1]/row[3],
+        row[2]/row[3]
+    ])
+data_radio = np.array(data_radio)
+print(data_radio)
+
+data = data_radio
+
+Y = data[:,0]
+X = data[:,1:]
+
+
+gmm = GaussianMixture(n_components=12)
+gmm.fit(X)
+
+labels = gmm.predict(X)
+ari = adjusted_rand_score(Y, labels)
+nmi = normalized_mutual_info_score(Y, labels)
+print(ari)
+print(nmi)
+ 
+
+"""
+
 Y = result[:,0]
 X = result[:,1:]
 
 clf = GaussianNB()
 clf.fit(X, Y)
-
+"""
 def getMatrix(filename):
     x = []
     sound = parselmouth.Sound(filename)

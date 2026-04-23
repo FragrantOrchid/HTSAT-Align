@@ -55,7 +55,7 @@ checkpoint_callback = ModelCheckpoint(
     save_top_k=5,
     mode="max"
 )
-refresh_rate=data_module.train_dataloader().__len__()//20
+refresh_rate=data_module.train_dataloader().__len__()//10
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -77,6 +77,22 @@ logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
 logging.getLogger("lightning.pytorch").addHandler(
     logging.FileHandler(os.path.join(args.export_path,"lightning.pytorch.log"))
 )
-# 4. 开始训练
-trainer.fit(model, datamodule=data_module, ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-15-23:15:00]/checkpoints/htsat-epoch=108-val_mAP=0.0650.ckpt")
-# trainer.validate(model,datamodule=data_module, ckpt_path="export/[2026-04-10-11:18:43]/checkpoints/htsat-epoch=34-val_mAP=0.94.ckpt")
+
+
+
+# 4. 安全加载检查点，只加载模型权重
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-04-23-01:04:06]/checkpoints/htsat-epoch=388-val_mAP=0.9742.ckpt"
+checkpoint = torch.load(checkpoint_path)
+
+state_dict = checkpoint.get('state_dict', checkpoint)
+
+model.load_state_dict(state_dict, strict=False)
+
+    
+trainer.fit(
+    model,
+    datamodule=data_module
+)
+
+# trainer.validate(model,datamodule=data_module,ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-15-12:10:08]/checkpoints/htsat-epoch=100-val_mAP=0.9596.ckpt")
+

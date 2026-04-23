@@ -8,9 +8,104 @@ import numpy as np
 from sklearn import metrics
 from src.layer.ScalarFilayer import ScalarFiLMLayer
 from torchlibrosa.augmentation import SpecAugmentation
+import torch.nn.functional as F
+from g2p_en import G2p
+CLASS_NAMES =     [
+        "backward",
+        "bed",
+        "bird",
+        "cat",
+        "dog",
+        "down",
+        "eight",
+        "five",
+        "follow",
+        "forward",
+        "four",
+        "go",
+        "happy",
+        "house",
+        "learn",
+        "left",
+        "marvin",
+        "nine",
+        "no",
+        "off",
+        "on",
+        "one",
+        "right",
+        "seven",
+        "sheila",
+        "six",
+        "stop",
+        "three",
+        "tree",
+        "two",
+        "up",
+        "visual",
+        "wow",
+        "yes",
+        "zero"
+    ]
+def levenshtein_distance(s1, s2):
+    """纯Python实现编辑距离，避免 nltk 版本兼容问题"""
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (c1 != c2)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    return prev_row[-1]
+    
+def compute_phonetic_similarity(labels, alpha=1.0, strip_stress=True):
+    """
+    生成 [N, N] 发音相似度矩阵
+    labels: list[str] 所有类别名称
+    alpha: 相似度衰减系数，越大对混淆惩罚越敏感 (默认1.0)
+    strip_stress: 是否去除重音标记(1,2,0)，建议开启
+    """
+    g2p = G2p()
+    phoneme_seqs = []
+    
+    for word in labels:
+        try:
+            phon = g2p(word)  # e.g., ['F', 'AO1', 'R', 'W', 'AH0', 'R', 'D']
+            if strip_stress:
+                phon = [p.replace('0','').replace('1','').replace('2','') for p in phon]
+            phoneme_seqs.append(phon)
+        except:
+            # OOV 词 fallback：按字母分拆（保守策略，相似度会偏低）
+            phoneme_seqs.append(list(word.lower()))
+
+    n = len(labels)
+    sim_matrix = np.eye(n, dtype=np.float32)  # 对角线为 1.0
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            dist = levenshtein_distance(phoneme_seqs[i], phoneme_seqs[j])
+            max_len = max(len(phoneme_seqs[i]), len(phoneme_seqs[j]))
+            if max_len == 0:
+                sim = 0.0
+            else:
+                # 指数衰减相似度：sim ∈ (0, 1]
+                sim = np.exp(-alpha * dist / max_len)
+            sim_matrix[i, j] = sim
+            sim_matrix[j, i] = sim
+
+    return sim_matrix
+
+sim_mat = compute_phonetic_similarity(CLASS_NAMES, alpha=1.0)
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, entropy_film: bool, vowel_embed: bool, sound_length: int):
         super().__init__()
+        self.strict_loading = False
         self.class_num = class_num
         self.entropy_film = entropy_film
         self.vowel_embed = vowel_embed
@@ -46,18 +141,23 @@ class HTSAT(pl.LightningModule):
             stride=1,
             padding=1
         )
-        self.avg = nn.AdaptiveAvgPool1d(1) # B,C,sequence_length -> B,C,1
+        # self.avg = nn.AdaptiveAvgPool1d(1) # B,C,sequence_length -> B,C,1
+        self.att_pool = nn.Sequential(
+            nn.Conv1d(self.class_num, 1, kernel_size=1),
+            nn.Softmax(dim=-1)
+        )
         if self.entropy_film:
             self.film = ScalarFiLMLayer(num_channel=class_num,hidden_dim=96*4)
 
     def forward(self,x,entropy,vowel):
-        x = (x-x.mean()) / x.std()
         # 扩展元音表
+        
         if self.vowel_embed:
+            x = (x-x.mean()) / x.std()
+            vowel = (vowel - vowel.mean()) / vowel.std()
             vowel = vowel.unsqueeze(1)
             vowel = self.vowel_padding(vowel)
             vowel = vowel.permute(0,1,3,2) # B,1,64,sound_length*160
-            vowel = (vowel - vowel.mean()) / vowel.std()
             x = torch.cat([vowel,x],dim=1)
         # x: B,C,H,W
         patch_tokens = self.patch_embed(x) # B,C,H,W
@@ -73,10 +173,12 @@ class HTSAT(pl.LightningModule):
             x = event.permute(0,2,1)
             x = self.film(x,entropy)
             event = x.permute(0,2,1)
-        
-        
-        target = self.avg(event) # B,C,1
-        target = target.squeeze(-1) # B,C(C = num_class)
+        # print(event)
+        # target = self.avg(event) # B,C,1
+        # target = target.squeeze(-1) # B,C(C = num_class)
+        attn_weights = self.att_pool(event)  # B, 1, W
+        target = (event * attn_weights).sum(dim=-1)  # B, C (注意力加权池化)
+        target = target.squeeze(-1)
         return torch.sigmoid(target)
 
 
@@ -88,10 +190,8 @@ class HTSAT(pl.LightningModule):
         vowel = batch["vowel"] if self.vowel_embed else None
 
         y = self(log_mel,entropy,vowel)
-        loss = torch.nn.functional.binary_cross_entropy(y,target.float())
-        # 累积日志
-        # self.outputs["y"] = y if self.outputs["y"] is None else torch.cat((self.outputs["y"],y),dim=0)
-        # self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
+        # loss = torch.nn.functional.binary_cross_entropy(y,target.float())
+        loss = self.phonetic_weighted_bce_loss(y,target.float())
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -102,7 +202,8 @@ class HTSAT(pl.LightningModule):
 
         y = self(log_mel,entropy,vowel)
         # 损失函数
-        loss = torch.nn.functional.binary_cross_entropy(y,target.float())
+        # loss = torch.nn.functional.binary_cross_entropy(y,target.float())
+        loss = self.phonetic_weighted_bce_loss(y,target.float())
         # 累积日志
         self.outputs["y"] = y if self.outputs["y"] is None else torch.cat((self.outputs["y"],y),dim=0)
         self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
@@ -144,21 +245,7 @@ class HTSAT(pl.LightningModule):
                 "frequency": 1,
             }
         }
-        
-    # 初始化样例输入  
-        """
-    def setup(self, stage):
-        if stage == "fit" and self.example_input_array is None:
-            # 获取验证集的第一个 batch
-            val_dataloader = self.trainer.datamodule.val_dataloader()
-            batch = next(iter(val_dataloader))
-            log_mel = batch["log_mel"]
-            target = batch["target"]
-            entropy = batch["entropy"]
-            vowel = batch["vowel"]
-            # 假设输入是 batch 的第一个元素（根据你的数据格式调整）
-            self.example_input_array = (log_mel,entropy,vowel)
-        """
+
     def on_validation_epoch_start(self):
         self.outputs = {
             "y": None,
@@ -167,7 +254,8 @@ class HTSAT(pl.LightningModule):
     def on_validation_epoch_end(self):
         y = self.outputs["y"]
         target = self.outputs["target"]  
-        loss = torch.nn.functional.binary_cross_entropy(y, target)
+        # loss = torch.nn.functional.binary_cross_entropy(y, target)
+        loss = self.phonetic_weighted_bce_loss(y,target)
         # numpy
         y = y.detach().cpu().numpy()
         target = target.detach().cpu().numpy().astype(int)
@@ -195,3 +283,20 @@ class HTSAT(pl.LightningModule):
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
     
+    def phonetic_weighted_bce_loss(self, logits, targets, lambda_sim=0.5):
+        sim_matrix = torch.tensor(sim_mat, device=logits.device, dtype=logits.dtype)
+        # probs = torch.sigmoid(logits)
+        # 标准 BCE
+        bce = F.binary_cross_entropy(logits, targets, reduction='none')  # B, C
+
+        # 相似性正则项：若 target[i]=1，则推远 logit[j]（j为高相似负类）
+        sim_reg = torch.zeros_like(bce)
+        for i in range(logits.shape[0]):
+            pos_mask = targets[i] > 0.5
+            if pos_mask.any():
+                # 加权推送：对高相似度类别施加更大排斥力
+                sim_reg[i] = (sim_matrix[pos_mask] * (1 - targets[i])).sum(dim=0)
+
+        # 梯度方向：相似负类的预测概率越高，惩罚越大
+        sim_loss = (sim_reg * logits).mean()
+        return bce.mean() + lambda_sim * sim_loss

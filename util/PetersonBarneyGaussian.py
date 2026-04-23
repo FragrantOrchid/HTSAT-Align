@@ -12,7 +12,7 @@ np.set_printoptions(
     linewidth=np.inf
 )
 # PetersonBarney
-file_path = '../data/verified_pb.data'
+file_path = '/home/u220110626/HLHTSAT/data/verified_pb.data'
 pb = []
 with open(file_path, 'r') as file:
     for line in file:
