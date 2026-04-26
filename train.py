@@ -34,17 +34,13 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=600//args.sound_length,
-    entropy_film=args.entropy_film,
-    vowel_embed=args.vowel_embed
+    batch_size=600//args.sound_length
 )
 
 # 2. 初始化模型
 model = HTSAT(
     class_num=args.class_num,
-    sound_length=args.sound_length,
-    entropy_film=args.entropy_film,
-    vowel_embed=args.vowel_embed
+    sound_length=args.sound_length
 )
 
 # 3. 配置训练器
@@ -79,7 +75,7 @@ logging.getLogger("lightning.pytorch").addHandler(
 )
 
 
-
+"""
 # 4. 安全加载检查点，只加载模型权重
 checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-04-23-01:04:06]/checkpoints/htsat-epoch=388-val_mAP=0.9742.ckpt"
 checkpoint = torch.load(checkpoint_path)
@@ -93,6 +89,7 @@ trainer.fit(
     model,
     datamodule=data_module
 )
-
-# trainer.validate(model,datamodule=data_module,ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-15-12:10:08]/checkpoints/htsat-epoch=100-val_mAP=0.9596.ckpt")
+"""
+trainer.fit(model,datamodule=data_module)
+# trainer.validate(model,datamodule=data_module,ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-24-12:52:35]/checkpoints/htsat-epoch=272-val_mAP=0.9687.ckpt")
 
