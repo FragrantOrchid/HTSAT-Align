@@ -55,7 +55,7 @@ refresh_rate=data_module.train_dataloader().__len__()//10
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
-    max_epochs=400,
+    max_epochs=800,
     callbacks=[
         checkpoint_callback,
         TQDMProgressBar(refresh_rate=refresh_rate)
@@ -75,21 +75,62 @@ logging.getLogger("lightning.pytorch").addHandler(
 )
 
 
-"""
+
 # 4. 安全加载检查点，只加载模型权重
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-04-23-01:04:06]/checkpoints/htsat-epoch=388-val_mAP=0.9742.ckpt"
+def load_part_of_state_dict(model, state_dict, strict=False):
+    """
+    加载部分模型状态字典，对于不匹配的参数保持随机初始化
+    """
+    model_state_dict = model.state_dict()
+    
+    # 创建一个新的状态字典，只包含匹配的参数
+    filtered_state_dict = {}
+    unmatched_keys = []
+    
+    for key, param in state_dict.items():
+        if key in model_state_dict:
+            # 检查参数形状是否匹配
+            if param.shape == model_state_dict[key].shape:
+                filtered_state_dict[key] = param
+            else:
+                print(f"跳过不匹配的参数: {key}, "
+                      f"检查点形状: {param.shape}, 当前模型形状: {model_state_dict[key].shape}")
+                unmatched_keys.append(key)
+        elif not strict:
+            # 如果不是严格模式，记录未找到的键
+            unmatched_keys.append(key)
+        else:
+            raise KeyError(f"Unexpected key(s) in state_dict: {key}")
+    
+    # 将过滤后的状态字典加载到模型中
+    model.load_state_dict(filtered_state_dict, strict=strict)
+    
+    # 打印加载结果
+    matched_keys = list(filtered_state_dict.keys())
+    print(f"成功加载 {len(matched_keys)} 个参数")
+    if unmatched_keys:
+        print(f"跳过 {len(unmatched_keys)} 个参数: {unmatched_keys}")
+    
+    return model
+
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-04-27-14:48:24]/checkpoints/htsat-epoch=096-val_mAP=0.9131.ckpt"
 checkpoint = torch.load(checkpoint_path)
 
 state_dict = checkpoint.get('state_dict', checkpoint)
 
-model.load_state_dict(state_dict, strict=False)
+# model = load_part_of_state_dict(model, state_dict, strict=False)
 
     
-trainer.fit(
+# trainer.fit(
+#     model,
+#     datamodule=data_module,
+#     ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-28-02:35:38]/checkpoints/htsat-epoch=467-val_mAP=0.9666.ckpt"
+# )
+
+
+trainer.validate(
     model,
-    datamodule=data_module
+    datamodule=data_module,
+    ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-28-02:35:38]/checkpoints/htsat-epoch=375-val_mAP=0.9667.ckpt"
 )
-"""
-trainer.fit(model,datamodule=data_module)
-# trainer.validate(model,datamodule=data_module,ckpt_path="/home/u220110626/HLHTSAT/export/[2026-04-24-12:52:35]/checkpoints/htsat-epoch=272-val_mAP=0.9687.ckpt")
 

@@ -35,7 +35,7 @@ class HTSATdataset(pl.LightningDataModule):
             batch_size=self.batch_size,  # 设置 batch_size
             shuffle=True,  # 训练集需要 shuffle
             num_workers=self.n_proc*3,  # 多线程加载数据
-            prefetch_factor=4,
+            prefetch_factor=2,
             persistent_workers=True,
             pin_memory=True  # 如果使用 GPU，可以加速数据传输
         )
@@ -46,7 +46,7 @@ class HTSATdataset(pl.LightningDataModule):
             batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
             shuffle=False,  # 验证集不需要 shuffle
             num_workers=self.n_proc*3,
-            prefetch_factor=4,
+            prefetch_factor=2,
             persistent_workers=True,
             pin_memory=True
         )
@@ -60,7 +60,7 @@ class HTSATdataset(pl.LightningDataModule):
 
             with open(datafile, 'r') as file:
                 self.data = json.load(file)['data']
-
+                
 
         def __len__(self):
             return len(self.data)
@@ -109,10 +109,9 @@ class HTSATdataset(pl.LightningDataModule):
             waveform = waveform - np.mean(waveform)
             result = {}
             # 常规特征
-            result["target"] = torch.tensor(self.get_target(index), dtype=torch.float32)  
-            result["phonemes"] = torch.tensor(self.get_phoneme_binary(index))
+            result["word_target"] = torch.tensor(self.get_target(index), dtype=torch.float32)  
+            result["phoneme_target"] = torch.tensor(self.get_phoneme_binary(index))
             result["log_mel"] = torch.tensor(self.get_log_mel(filename=filename,waveform=waveform), dtype=torch.float32) 
-
 
             return result
 

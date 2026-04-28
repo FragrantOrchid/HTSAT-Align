@@ -41,7 +41,7 @@ class HTSAT(pl.LightningModule):
         # 使用简单卷积
         self.conv = nn.Conv2d(
             in_channels=96*16,
-            out_channels=35,
+            out_channels=39,
             kernel_size=3,
             stride=1,
             padding=1
@@ -49,9 +49,9 @@ class HTSAT(pl.LightningModule):
         
         # 使用LSTM模块
         self.lstm = nn.LSTM(
-            input_size=96*16,
-            hidden_size=96*16,
-            num_layers=2,
+            input_size=39,
+            hidden_size=96*2,
+            num_layers=4,
             bidirectional=True,
             batch_first=True,
             proj_size=96
@@ -66,6 +66,8 @@ class HTSAT(pl.LightningModule):
             out_features=35
         )
         
+        self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
+        
 
     def forward(self,x):
         # x: B,C,H,W
@@ -73,65 +75,50 @@ class HTSAT(pl.LightningModule):
         patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
         for model in self.swins:
             patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
-            # self.print(f"Swin step {patch_tokens.shape}")
-        latent_tokens = patch_tokens.permute(0,3,1,2) # B,C*8,H/(P*8),W(P*8)
-        
-        # 直接卷积
-        # label_map = self.conv(latent_tokens) # B , c', 1, W
-        # pooled = nn.AdaptiveAvgPool2d((1, 1))(label_map)  # 输出形状 (B, 35, 1, 1)
-        # logit = pooled.view(pooled.size(0), -1)  # 展平为 (B, 35)
-        
-        # LSTM模块
-        # 将特征图重塑为序列格式 (B, T, C)
-        B, C, H, W = latent_tokens.shape
-        # 将空间维度合并作为时间步长 - 需要转置以获得正确的维度顺序
-        latent_tokens = latent_tokens.permute(0, 2, 3, 1)  # (B, H, W, C)
-        latent_tokens = latent_tokens.contiguous().view(B, H * W, C)  # (B, H*W, C)
-        
-        # LSTM处理
-        lstm_out, (h_n, c_n) = self.lstm(latent_tokens)
-        
-        # 使用双向LSTM的最终状态进行预测
-        # 对于双向LSTM，h_n的形状是 (num_layers * num_directions, batch, hidden_size)
-        # 我们取最后两层的前向和后向隐藏状态
-        h_forward = h_n[-2]  # 前向最后一层
-        h_backward = h_n[-1]  # 后向最后一层
-        h_cat = torch.cat([h_forward, h_backward], dim=-1)  # 拼接
-        
-        # 添加层归一化以稳定训练
+        patch_tokens = patch_tokens.permute(0,3,1,2) # B,C,H,W
+        phoneme_event = self.conv(patch_tokens) # B,39,H,W
+        phoneme_event = phoneme_event.permute(0,3,1,2).squeeze(-1) # B,W,39
+        # print(f"patch_tokens_shape {patch_tokens.shape}")
+        lstm_out, (h_n, c_n) = self.lstm(phoneme_event)
+        h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
         h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
         
-        logit = self.proj(h_cat)
-        return torch.sigmoid(logit)
+        word_logit = self.proj(h_cat)
+        phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
+
+        return phoneme_logit, word_logit
  
 
 
     
     def training_step(self, batch, batch_idx):
         log_mel = self.spec_aug(batch["log_mel"])
+        word_target = batch["word_target"]
+        phoneme_target = batch["phoneme_target"]
+        
+        phoneme_logit, word_logit = self(log_mel)
 
-        target = batch["target"]
+        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
+        loss_word = F.binary_cross_entropy_with_logits(word_logit,word_target)
 
-        y_prob = self(log_mel)
-
-        loss = F.binary_cross_entropy(y_prob,target)
-
-        return loss
+        return loss_phoneme+loss_word
 
     def validation_step(self, batch, batch_idx):
-        log_mel = batch["log_mel"]
+        log_mel = self.spec_aug(batch["log_mel"])
+        word_target = batch["word_target"]
+        phoneme_target = batch["phoneme_target"]
         
-        target = batch["target"]
+        phoneme_logit, word_logit = self(log_mel)
 
-        y_prob = self(log_mel)
-
-        loss = F.binary_cross_entropy(y_prob,target)
+        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
+        loss_word = F.binary_cross_entropy_with_logits(word_logit,word_target)
 
         # 累积日志
-        self.outputs["y_prob"] = y_prob.float() if self.outputs["y_prob"] is None else torch.cat((self.outputs["y_prob"],y_prob.float()),dim=0)
-        self.outputs["target"] = target.float() if self.outputs["target"] is None else torch.cat((self.outputs["target"],target.float()),dim=0)
-
-        return loss
+        self.outputs["phoneme_logit"] = phoneme_logit.float() if self.outputs["phoneme_logit"] is None else torch.cat((self.outputs["phoneme_logit"],phoneme_logit.float()),dim=0)
+        self.outputs["phoneme_target"] = phoneme_target.float() if self.outputs["phoneme_target"] is None else torch.cat((self.outputs["phoneme_target"],phoneme_target.float()),dim=0)
+        self.outputs["word_logit"] = word_logit.float() if self.outputs["word_logit"] is None else torch.cat((self.outputs["word_logit"],word_logit.float()),dim=0)
+        self.outputs["word_target"] = word_target.float() if self.outputs["word_target"] is None else torch.cat((self.outputs["word_target"],word_target.float()),dim=0)
+        return loss_phoneme+loss_word
 
     def configure_optimizers(self):
         # 1. 优化器配置 (AdamW)
@@ -171,18 +158,23 @@ class HTSAT(pl.LightningModule):
 
     def on_validation_epoch_start(self):
         self.outputs = {
-            "y_prob" : None,
-            "target" : None
+            "phoneme_logit" : None,
+            "phoneme_target" : None,
+            "word_logit" : None,
+            "word_target" : None
         }
     def on_validation_epoch_end(self):
-        y_prob = self.outputs["y_prob"]
-        target = self.outputs["target"]
+        phoneme_logit = self.outputs["phoneme_logit"]
+        phoneme_target = self.outputs["phoneme_target"]
+        word_logit = self.outputs["word_logit"]
+        word_target = self.outputs["word_target"]
 
-        loss = F.binary_cross_entropy(y_prob,target)
+        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit, phoneme_target)
+        loss_word = F.binary_cross_entropy_with_logits(word_logit, word_target)
 
         # numpy
-        y = y_prob.float().detach().cpu().numpy()
-        target = target.float().detach().cpu().numpy().astype(int)
+        y = torch.sigmoid(word_logit).float().detach().cpu().numpy()
+        target = word_target.float().detach().cpu().numpy().astype(int)
 
         # calculate
         acc = metrics.accuracy_score(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
@@ -197,7 +189,9 @@ class HTSAT(pl.LightningModule):
             for k in range(self.class_num)
         ]
         self.log("val_simples",y.shape[0])
-        self.log("val_loss",loss)
+        self.log("val_loss_phoneme", loss_phoneme)
+        self.log("val_loss_word", loss_word)
+        self.log("val_loss",loss_phoneme+loss_word)
         self.log("val_acc",acc)
         self.log("val_mAP",np.mean(average_precision_scores))
         logging.getLogger("lightning.pytorch").info(
@@ -207,4 +201,23 @@ class HTSAT(pl.LightningModule):
             logging.getLogger("lightning.pytorch").info(
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
+        
+        validate_map = {
+            "9->9" : [],
+            "9->10" : [],
+            "10->10" : []
+        }
+        y_true=np.argmax(target,1)
+        y_pred=np.argmax(y,1)
+        for index in range(y.shape[0]):
+            if y_true[index] == 9 and y_pred[index] == 9:
+                validate_map["9->9"].append(index)
+            if y_true[index] == 9 and y_pred[index] == 10:
+                validate_map["9->10"].append(index)
+            if y_true[index] == 10 and y_pred[index] == 10:
+                validate_map["10->10"].append(index)
+                
+        logging.getLogger("lightning.pytorch").info(
+            f'{validate_map}'
+        )
     
