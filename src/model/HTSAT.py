@@ -51,7 +51,7 @@ class HTSAT(pl.LightningModule):
         self.lstm = nn.LSTM(
             input_size=39,
             hidden_size=96*2,
-            num_layers=4,
+            num_layers=2,
             bidirectional=True,
             batch_first=True,
             proj_size=96
@@ -63,7 +63,7 @@ class HTSAT(pl.LightningModule):
         # )
         self.proj = nn.Linear(
             in_features=96*2,
-            out_features=35
+            out_features=31
         )
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
@@ -201,7 +201,7 @@ class HTSAT(pl.LightningModule):
             logging.getLogger("lightning.pytorch").info(
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
-        
+        """
         validate_map = {
             "9->9" : [],
             "9->10" : [],
@@ -219,5 +219,5 @@ class HTSAT(pl.LightningModule):
                 
         logging.getLogger("lightning.pytorch").info(
             f'{validate_map}'
-        )
+        )"""
     
