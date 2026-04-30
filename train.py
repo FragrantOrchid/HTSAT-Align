@@ -123,7 +123,8 @@ state_dict = checkpoint.get('state_dict', checkpoint)
     
 trainer.fit(
     model,
-    datamodule=data_module
+    datamodule=data_module,
+    ckpt_path=None
 )
 
 

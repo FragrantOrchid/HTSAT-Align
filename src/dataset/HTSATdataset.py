@@ -33,7 +33,8 @@ class HTSATdataset(pl.LightningDataModule):
             batch_size=self.batch_size,  # 设置 batch_size
             shuffle=True,  # 训练集需要 shuffle
             num_workers=self.n_proc,  # 多线程加载数据
-            pin_memory=True  # 如果使用 GPU，可以加速数据传输
+            pin_memory=True,  # 如果使用 GPU，可以加速数据传输
+            prefetch_factor = 2
         )
     def val_dataloader(self):
         dataset = self.HTSATsubdataset(self.val_file,self.label_vsc,self.sound_length)
@@ -43,7 +44,8 @@ class HTSATdataset(pl.LightningDataModule):
             shuffle=False,  # 验证集不需要 shuffle
             num_workers=self.n_proc,
             pin_memory=True,
-            persistent_workers=True
+            persistent_workers=True,
+            prefetch_factor = 2
         )
     class HTSATsubdataset(Dataset):
         def __init__(self,datafile,label_csv,sound_length):

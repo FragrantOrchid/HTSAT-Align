@@ -49,8 +49,8 @@ class HTSAT(pl.LightningModule):
         
         # 使用LSTM模块
         self.lstm = nn.LSTM(
-            input_size=39,
-            hidden_size=96*2,
+            input_size=96*16,
+            hidden_size=96*4,
             num_layers=2,
             bidirectional=True,
             batch_first=True,
@@ -63,7 +63,7 @@ class HTSAT(pl.LightningModule):
         # )
         self.proj = nn.Linear(
             in_features=96*2,
-            out_features=31
+            out_features=self.class_num
         )
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
@@ -79,7 +79,8 @@ class HTSAT(pl.LightningModule):
         phoneme_event = self.conv(patch_tokens) # B,39,H,W
         phoneme_event = phoneme_event.permute(0,3,1,2).squeeze(-1) # B,W,39
         # print(f"patch_tokens_shape {patch_tokens.shape}")
-        lstm_out, (h_n, c_n) = self.lstm(phoneme_event)
+        lstm_input = patch_tokens.permute(0,3,1,2).squeeze(-1)
+        lstm_out, (h_n, c_n) = self.lstm(lstm_input)
         h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
         h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
         
