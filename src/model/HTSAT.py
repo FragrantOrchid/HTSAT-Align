@@ -50,11 +50,10 @@ class HTSAT(pl.LightningModule):
         # 使用LSTM模块
         self.lstm = nn.LSTM(
             input_size=96*16,
-            hidden_size=96*4,
+            hidden_size=96*16,
             num_layers=2,
             bidirectional=True,
-            batch_first=True,
-            proj_size=96
+            batch_first=True
         )
         # self.proj = nn.Sequential(
         #     nn.Linear(2 * 96, 35, bias=True),
@@ -62,7 +61,7 @@ class HTSAT(pl.LightningModule):
         #     nn.Dropout(0.0)
         # )
         self.proj = nn.Linear(
-            in_features=96*2,
+            in_features=96*32,
             out_features=self.class_num
         )
         

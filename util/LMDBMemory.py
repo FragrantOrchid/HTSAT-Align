@@ -46,8 +46,7 @@ class LMDBMemory:
     def cache(self, key: str):
         def decorator(func):
             def wrapper(*args, **kwargs):
-                # 获取LMDB环境
-                env = self._get_env()
+
 
                 # 获取函数签名
                 sig = inspect.signature(func)
@@ -61,7 +60,8 @@ class LMDBMemory:
                     raise ValueError(f"Index parameter is required for function {func.__name__}")
 
                 buffer_key = (key + str(index)).encode('utf-8')
-
+                # 获取LMDB环境
+                env = self._get_env()
                 with env.begin() as r:
                     value = r.get(buffer_key)
 

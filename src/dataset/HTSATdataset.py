@@ -57,6 +57,20 @@ class HTSATdataset(pl.LightningDataModule):
 
             with open(datafile, 'r') as file:
                 self.data = json.load(file)['data']
+                
+                        # 这个步骤移动到init TODO
+            self.mel_spec = torchaudio.transforms.MelSpectrogram(
+                sample_rate=32000,
+                center=False,
+                pad=150,
+                hop_length=200, # 0.1*sampel_rate/16
+                win_length=500,
+                n_fft=500,
+                n_mels=64,
+                f_min=80,
+                f_max=8000
+            )    
+            
             self.memory = LMDBMemory(location="/users/u220110626/.cache/LMDBMemory/", name = hashlib.sha256(datafile.encode("utf-8")).hexdigest(), len=len(self.data))
             self.get_log_mel_with_cache = self.memory.cache(key = "log_mel")(self.get_log_mel)
             # self.get_phoneme_binary_with_cache = self.memory.cache(key = "phoneme_binary")(self.get_phoneme_binary)
@@ -88,19 +102,8 @@ class HTSATdataset(pl.LightningDataModule):
                 waveform = waveform[:target_length]
             waveform = waveform - np.mean(waveform)
             waveform = torch.unsqueeze(torch.from_numpy(waveform), dim=0)
-            # 这个步骤移动到init TODO
-            mel_spec = torchaudio.transforms.MelSpectrogram(
-                sample_rate=32000,
-                center=False,
-                pad=150,
-                hop_length=200, # 0.1*sampel_rate/16
-                win_length=500,
-                n_fft=500,
-                n_mels=64,
-                f_min=80,
-                f_max=8000
-            )
-            log_mel = torchaudio.transforms.AmplitudeToDB()(mel_spec(waveform))
+
+            log_mel = torchaudio.transforms.AmplitudeToDB()(self.mel_spec(waveform))
             return log_mel.numpy().copy()
 
 
