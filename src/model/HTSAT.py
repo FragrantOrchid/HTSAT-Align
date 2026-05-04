@@ -5,13 +5,8 @@ from torchvision.models.swin_transformer import PatchMergingV2, SwinTransformerB
 import logging
 import numpy as np
 from sklearn import metrics
-# from src.layer.ScalarFilayer import ScalarFiLMLayer
 from torchlibrosa.augmentation import SpecAugmentation
 import torch.nn.functional as F
-# from src.layer.TransformerClassifier import TransformerClassifier
-# from src.layer.GlobalGateAttention import GlobalGateAttention
-from src.layer.TemporalAwareAttention import TemporalAwareAttention
-from src.layer.SGMWithGEModule import SGMWithGEModule
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
@@ -37,32 +32,10 @@ class HTSAT(pl.LightningModule):
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
             PatchMergingV2(dim=96*8)
         ])
-        # BCHW
-        # 使用简单卷积
-        self.conv = nn.Conv2d(
-            in_channels=96*16,
-            out_channels=39,
-            kernel_size=3,
-            stride=1,
-            padding=1
-        )
         
-        # 使用LSTM模块
-        self.lstm = nn.LSTM(
-            input_size=96*16,
-            hidden_size=96*16,
-            num_layers=2,
-            bidirectional=True,
-            batch_first=True
-        )
-        # self.proj = nn.Sequential(
-        #     nn.Linear(2 * 96, 35, bias=True),
-        #     nn.GELU(),               # 或 ReLU/Tanh
-        #     nn.Dropout(0.0)
-        # )
-        self.proj = nn.Linear(
-            in_features=96*32,
-            out_features=self.class_num
+        self.linear = nn.Linear(
+            in_features=96*16,
+            out_features=39
         )
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
@@ -74,51 +47,41 @@ class HTSAT(pl.LightningModule):
         patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
         for model in self.swins:
             patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
-        patch_tokens = patch_tokens.permute(0,3,1,2) # B,C,H,W
-        phoneme_event = self.conv(patch_tokens) # B,39,H,W
-        phoneme_event = phoneme_event.permute(0,3,1,2).squeeze(-1) # B,W,39
-        # print(f"patch_tokens_shape {patch_tokens.shape}")
-        lstm_input = patch_tokens.permute(0,3,1,2).squeeze(-1)
-        lstm_out, (h_n, c_n) = self.lstm(lstm_input)
-        h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
-        h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
-        
-        word_logit = self.proj(h_cat)
-        phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
-        return phoneme_logit, word_logit
+        patch_tokens = patch_tokens.squeeze(1) # B, W , 96*16
+        # print(f"Patch Tokens {patch_tokens.shape}")
+        phoneme_event = self.linear(patch_tokens) # B, W, 39
+        # print(f"Phoneme Event {phoneme_event.shape}")
+        phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
+        # print(f"Phoneme Login {phoneme_logit.shape}")
+        return phoneme_logit
  
 
 
     
     def training_step(self, batch, batch_idx):
         log_mel = self.spec_aug(batch["log_mel"])
-        word_target = batch["word_target"]
         phoneme_target = batch["phoneme_target"]
         
-        phoneme_logit, word_logit = self(log_mel)
+        phoneme_logit = self(log_mel)
 
-        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
-        loss_word = F.binary_cross_entropy_with_logits(word_logit,word_target)
+        loss = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
 
-        return loss_phoneme+loss_word
+        return loss
 
     def validation_step(self, batch, batch_idx):
-        log_mel = self.spec_aug(batch["log_mel"])
-        word_target = batch["word_target"]
+        log_mel = batch["log_mel"]
         phoneme_target = batch["phoneme_target"]
         
-        phoneme_logit, word_logit = self(log_mel)
+        phoneme_logit = self(log_mel)
 
-        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
-        loss_word = F.binary_cross_entropy_with_logits(word_logit,word_target)
+        loss = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
 
         # 累积日志
         self.outputs["phoneme_logit"] = phoneme_logit.float() if self.outputs["phoneme_logit"] is None else torch.cat((self.outputs["phoneme_logit"],phoneme_logit.float()),dim=0)
         self.outputs["phoneme_target"] = phoneme_target.float() if self.outputs["phoneme_target"] is None else torch.cat((self.outputs["phoneme_target"],phoneme_target.float()),dim=0)
-        self.outputs["word_logit"] = word_logit.float() if self.outputs["word_logit"] is None else torch.cat((self.outputs["word_logit"],word_logit.float()),dim=0)
-        self.outputs["word_target"] = word_target.float() if self.outputs["word_target"] is None else torch.cat((self.outputs["word_target"],word_target.float()),dim=0)
-        return loss_phoneme+loss_word
+        
+        return loss
 
     def configure_optimizers(self):
         # 1. 优化器配置 (AdamW)
@@ -159,22 +122,17 @@ class HTSAT(pl.LightningModule):
     def on_validation_epoch_start(self):
         self.outputs = {
             "phoneme_logit" : None,
-            "phoneme_target" : None,
-            "word_logit" : None,
-            "word_target" : None
+            "phoneme_target" : None
         }
     def on_validation_epoch_end(self):
         phoneme_logit = self.outputs["phoneme_logit"]
         phoneme_target = self.outputs["phoneme_target"]
-        word_logit = self.outputs["word_logit"]
-        word_target = self.outputs["word_target"]
 
-        loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit, phoneme_target)
-        loss_word = F.binary_cross_entropy_with_logits(word_logit, word_target)
+        loss = F.binary_cross_entropy_with_logits(phoneme_logit, phoneme_target)
 
         # numpy
-        y = torch.sigmoid(word_logit).float().detach().cpu().numpy()
-        target = word_target.float().detach().cpu().numpy().astype(int)
+        y = torch.sigmoid(phoneme_logit).float().detach().cpu().numpy()
+        target = phoneme_target.float().detach().cpu().numpy().astype(int)
 
         # calculate
         acc = metrics.accuracy_score(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
@@ -189,9 +147,7 @@ class HTSAT(pl.LightningModule):
             for k in range(self.class_num)
         ]
         self.log("val_simples",y.shape[0])
-        self.log("val_loss_phoneme", loss_phoneme)
-        self.log("val_loss_word", loss_word)
-        self.log("val_loss",loss_phoneme+loss_word)
+        self.log("val_loss",loss)
         self.log("val_acc",acc)
         self.log("val_mAP",np.mean(average_precision_scores))
         logging.getLogger("lightning.pytorch").info(

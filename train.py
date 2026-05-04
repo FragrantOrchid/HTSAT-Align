@@ -51,14 +51,14 @@ checkpoint_callback = ModelCheckpoint(
     save_top_k=5,
     mode="max"
 )
-refresh_rate=data_module.train_dataloader().__len__()//10
+refresh_rate=data_module.train_dataloader().__len__()//50
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
     max_epochs=800,
     callbacks=[
         checkpoint_callback,
-        TQDMProgressBar(refresh_rate=refresh_rate)
+        TQDMProgressBar(refresh_rate=1)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -118,7 +118,7 @@ checkpoint = torch.load(checkpoint_path)
 
 state_dict = checkpoint.get('state_dict', checkpoint)
 
-model = load_part_of_state_dict(model, state_dict, strict=False)
+# model = load_part_of_state_dict(model, state_dict, strict=False)
 
     
 trainer.fit(
