@@ -113,18 +113,24 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-01-00:11:29]/checkpoints/htsat-epoch=572-val_mAP=0.9689.ckpt"
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-05-19:20:03]/checkpoints/htsat-epoch=016-val_mAP=0.9191.ckpt"
 checkpoint = torch.load(checkpoint_path)
 
 state_dict = checkpoint.get('state_dict', checkpoint)
 
 model = load_part_of_state_dict(model, state_dict, strict=False)
 
+# 冻结部分参数
+for param in model.patch_embed.parameters():
+    param.requires_grad = False
+for param in model.swins.parameters():
+    param.requires_grad = False
+for param in model.linear.parameters():
+    param.requires_grad = False
     
 trainer.fit(
     model,
-    datamodule=data_module,
-    ckpt_path=None
+    datamodule=data_module
 )
 
 

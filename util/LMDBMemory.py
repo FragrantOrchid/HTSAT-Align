@@ -1,12 +1,13 @@
 import os
-import h5py
-from filelock import FileLock
 import numpy as np
-import threading
 import lmdb
 import numpy as np
 import io
 import inspect
+from pathlib import Path
+from typing import List
+import lmdb.aio
+import asyncio
 
 def serialize_numpy(arr: np.ndarray) -> bytes:
     """将 numpy 数组序列化为 bytes"""
@@ -19,67 +20,49 @@ def deserialize_numpy(data: bytes) -> np.ndarray:
     buf = io.BytesIO(data)
     return np.load(buf, allow_pickle=False)
 
-class LMDBMemory:
-    def __init__(self, location : str, name : str, len : int):
-        self.len = len
-        self.location = location
-        self.name = name
-        os.makedirs(location, exist_ok=True)
-        # 由于多进程环境中每个进程都需要自己的环境句柄，
-        # 我们不再在这里初始化环境
-        # 改为在每次需要时重新打开（如果不存在）
-        self.lmdb_path = os.path.join(self.location, f"{self.name}.lmdb")
+def get_env(location: str, name: str):
+    # LMDB支持多进程访问，但每个进程需要独立的Env对象
+    db_path = Path(location) / f"{name}.lmdb"
+    return lmdb.open(
+        str(db_path),
+        map_size=1024**4,
+        max_readers=1024,  # 增加最大读者数以支持更多并行进程
+        writemap=True    # 使用内存映射写入，提高性能
+    )
 
-
-    def _get_env(self):
-        """获取LMDB环境，适用于多进程环境"""
-        # 对于多进程场景，每个进程都应该有自己的环境句柄
-        # LMDB支持多进程访问，但每个进程需要独立的Env对象
-        return lmdb.open(
-            self.lmdb_path,
-            map_size=1024**4,
-            writemap=True,
-            map_async=True,
-            max_readers=1024
-        )
-
-    def cache(self, key: str):
-        def decorator(func):
-            def wrapper(*args, **kwargs):
-
-
-                # 获取函数签名
-                sig = inspect.signature(func)
-                bound_args = sig.bind(*args, **kwargs)
-                bound_args.apply_defaults()
-
-                # 提取名为index的参数
-                if 'index' in bound_args.arguments:
-                    index = bound_args.arguments['index']
+def cache(env: lmdb.Environment, unique_keys: List[str]):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            # 获取函数签名
+            sig = inspect.signature(func)
+            bound_args = sig.bind(*args, **kwargs)
+            bound_args.apply_defaults()
+            
+            key = [str(func.__name__)]
+            for unique_key in unique_keys:
+                if unique_key in bound_args.arguments:
+                    key.append(str(bound_args.arguments[unique_key]))
                 else:
-                    raise ValueError(f"Index parameter is required for function {func.__name__}")
+                    raise ValueError(f"{unique_key} parameter is required for function {func.__name__}")
+            key = "@".join(key)
+            buffer_key = key.encode('utf-8')
+            # 快速读测试
+            with env.begin() as r:
+                value = r.get(buffer_key)
+            if value is not None:
+                return deserialize_numpy(value)
+            # 读取失败，需要写入
+            result = func(*args, **kwargs)
+            
+            # 不考虑写后写，直接覆写
+            asyncio.run(async_write(env=env, key=buffer_key, value=result))
+            
+            return result
+        return wrapper
+    return decorator
 
-                buffer_key = (key + str(index)).encode('utf-8')
-                # 获取LMDB环境
-                env = self._get_env()
-                with env.begin() as r:
-                    value = r.get(buffer_key)
-
-                if value is not None:
-                    # 关闭环境并返回结果
-                    env.close()
-                    return deserialize_numpy(value)
-
-                # 读取失败，需要写入
-                result = func(*args, **kwargs)
-                value = serialize_numpy(result)
-                # 不考虑写后写，直接覆写
-                with env.begin(write=True) as w:
-                    w.put(buffer_key, value, overwrite=True)
-                
-                # 关闭环境并返回结果
-                env.close()
-                return result
-
-            return wrapper
-        return decorator
+async def async_write(env,key,value):
+    value = serialize_numpy(value)
+    async_env = lmdb.aio.wrap(env)
+    async with async_env.begin(write=True) as w:
+        await w.put(key=key,value=value)

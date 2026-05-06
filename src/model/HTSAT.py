@@ -12,14 +12,21 @@ import torch.nn.functional as F
 # from src.layer.GlobalGateAttention import GlobalGateAttention
 from src.layer.TemporalAwareAttention import TemporalAwareAttention
 from src.layer.SGMWithGEModule import SGMWithGEModule
+import torchaudio.transforms as T
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
         self.strict_loading = False
         self.class_num = class_num
         self.sound_length = sound_length
-        self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
-
+        # self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
+        self.spec_aug = T.SpecAugment(
+            n_time_masks=2,
+            time_mask_param=self.sound_length*16, # 10%
+            n_freq_masks=2,
+            freq_mask_param=8,
+            p=0.5
+        )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
@@ -39,12 +46,9 @@ class HTSAT(pl.LightningModule):
         ])
         # BCHW
         # 使用简单卷积
-        self.conv = nn.Conv2d(
-            in_channels=96*16,
-            out_channels=39,
-            kernel_size=3,
-            stride=1,
-            padding=1
+        self.linear = nn.Linear(
+            in_features=96*16,
+            out_features=39
         )
         
         # 使用LSTM模块
@@ -67,18 +71,19 @@ class HTSAT(pl.LightningModule):
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
         
-
+    
     def forward(self,x):
         # x: B,C,H,W
         patch_tokens = self.patch_embed(x) # B,C,H,W
         patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
         for model in self.swins:
             patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
-        patch_tokens = patch_tokens.permute(0,3,1,2) # B,C,H,W
-        phoneme_event = self.conv(patch_tokens) # B,39,H,W
-        phoneme_event = phoneme_event.permute(0,3,1,2).squeeze(-1) # B,W,39
+
+        phoneme_event = self.linear(patch_tokens) # B,H,W,39
+        phoneme_event = phoneme_event.squeeze(1) # B,W,39
         # print(f"patch_tokens_shape {patch_tokens.shape}")
-        lstm_input = patch_tokens.permute(0,3,1,2).squeeze(-1)
+        lstm_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B, W, C
+        # print(f"lstm_input shape {lstm_input.shape}")
         lstm_out, (h_n, c_n) = self.lstm(lstm_input)
         h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
         h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
@@ -101,10 +106,10 @@ class HTSAT(pl.LightningModule):
         loss_phoneme = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
         loss_word = F.binary_cross_entropy_with_logits(word_logit,word_target)
 
-        return loss_phoneme+loss_word
+        return loss_word
 
     def validation_step(self, batch, batch_idx):
-        log_mel = self.spec_aug(batch["log_mel"])
+        log_mel = batch["log_mel"]
         word_target = batch["word_target"]
         phoneme_target = batch["phoneme_target"]
         
@@ -118,7 +123,7 @@ class HTSAT(pl.LightningModule):
         self.outputs["phoneme_target"] = phoneme_target.float() if self.outputs["phoneme_target"] is None else torch.cat((self.outputs["phoneme_target"],phoneme_target.float()),dim=0)
         self.outputs["word_logit"] = word_logit.float() if self.outputs["word_logit"] is None else torch.cat((self.outputs["word_logit"],word_logit.float()),dim=0)
         self.outputs["word_target"] = word_target.float() if self.outputs["word_target"] is None else torch.cat((self.outputs["word_target"],word_target.float()),dim=0)
-        return loss_phoneme+loss_word
+        return loss_word
 
     def configure_optimizers(self):
         # 1. 优化器配置 (AdamW)
@@ -191,7 +196,7 @@ class HTSAT(pl.LightningModule):
         self.log("val_simples",y.shape[0])
         self.log("val_loss_phoneme", loss_phoneme)
         self.log("val_loss_word", loss_word)
-        self.log("val_loss",loss_phoneme+loss_word)
+        self.log("val_loss_plus",loss_phoneme+loss_word)
         self.log("val_acc",acc)
         self.log("val_mAP",np.mean(average_precision_scores))
         logging.getLogger("lightning.pytorch").info(
