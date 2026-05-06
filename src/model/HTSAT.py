@@ -7,14 +7,22 @@ import numpy as np
 from sklearn import metrics
 from torchlibrosa.augmentation import SpecAugmentation
 import torch.nn.functional as F
+import math
+import torchaudio.transforms as T
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
         self.strict_loading = False
         self.class_num = class_num
         self.sound_length = sound_length
-        self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
-
+        # self.spec_aug = SpecAugmentation(time_drop_width=16,time_stripes_num=1,freq_drop_width=8,freq_stripes_num=2) # 时间掩码向上取正值
+        self.spec_aug = T.SpecAugment(
+            n_time_masks=2,
+            time_mask_param=self.sound_length*16, # 10%
+            n_freq_masks=2,
+            freq_mask_param=8,
+            p=0.5
+        )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160

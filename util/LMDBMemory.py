@@ -6,6 +6,8 @@ import io
 import inspect
 from pathlib import Path
 from typing import List
+import lmdb.aio
+import asyncio
 
 def serialize_numpy(arr: np.ndarray) -> bytes:
     """将 numpy 数组序列化为 bytes"""
@@ -51,11 +53,16 @@ def cache(env: lmdb.Environment, unique_keys: List[str]):
                 return deserialize_numpy(value)
             # 读取失败，需要写入
             result = func(*args, **kwargs)
-            value = serialize_numpy(result)
+            
             # 不考虑写后写，直接覆写
-            with env.begin(write=True) as w:
-                w.put(key = buffer_key, value=value)
+            asyncio.run(async_write(env=env, key=buffer_key, value=result))
             
             return result
         return wrapper
     return decorator
+
+async def async_write(env,key,value):
+    value = serialize_numpy(value)
+    async_env = lmdb.aio.wrap(env)
+    async with async_env.begin(write=True) as w:
+        await w.put(key=key,value=value)

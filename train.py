@@ -58,7 +58,7 @@ trainer = Trainer(
     max_epochs=800,
     callbacks=[
         checkpoint_callback,
-        TQDMProgressBar(refresh_rate=1)
+        TQDMProgressBar(refresh_rate=refresh_rate)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
