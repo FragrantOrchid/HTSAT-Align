@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from src.layer.TemporalAwareAttention import TemporalAwareAttention
 from src.layer.SGMWithGEModule import SGMWithGEModule
 import torchaudio.transforms as T
+from util.GaussianSpecAugment import GaussianSpecAugment
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
@@ -20,12 +21,17 @@ class HTSAT(pl.LightningModule):
         self.class_num = class_num
         self.sound_length = sound_length
         # self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
-        self.spec_aug = T.SpecAugment(
-            n_time_masks=2,
-            time_mask_param=self.sound_length*16, # 10%
-            n_freq_masks=2,
-            freq_mask_param=8,
-            p=0.5
+        # self.spec_aug = T.SpecAugment(
+        #     n_time_masks=2,
+        #     time_mask_param=self.sound_length*16, # 10%
+        #     n_freq_masks=2,
+        #     freq_mask_param=8,
+        #     p=0.5
+        # )
+        self.spec_aug = GaussianSpecAugment(
+            patch_size=(8,16),
+            mask_ratio=0.25,
+            cluster_strength=0.50
         )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
@@ -89,10 +95,10 @@ class HTSAT(pl.LightningModule):
         lstm_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B, W, C
         # print(f"lstm_input shape {lstm_input.shape}")
         lstm_out, (h_n, c_n) = self.lstm(lstm_input)
-        h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
-        h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
+        # h_cat = torch.cat([h_n[-2], h_n[-1]], dim=-1)  # 拼接
+        # h_cat = torch.nn.functional.normalize(h_cat, p=2, dim=1)
         
-        word_logit = self.proj(h_cat)
+        word_logit = self.proj(lstm_out[:,-1,:])
         phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
         return phoneme_logit, word_logit
@@ -101,7 +107,8 @@ class HTSAT(pl.LightningModule):
 
     
     def training_step(self, batch, batch_idx):
-        log_mel = self.spec_aug(batch["log_mel"])
+        # log_mel = self.spec_aug(batch["log_mel"])
+        log_mel = batch["log_mel"]
         word_target = batch["word_target"]
         phoneme_target = batch["phoneme_target"]
         

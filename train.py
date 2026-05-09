@@ -124,7 +124,7 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-09-00:07:20]/checkpoints/htsat-epoch=025-val_mAP=0.9562.ckpt"
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-09-16:55:01]/checkpoints/htsat-epoch=016-val_mAP=0.9668.ckpt"
 checkpoint = torch.load(checkpoint_path)
 
 state_dict = checkpoint.get('state_dict', checkpoint)
