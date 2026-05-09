@@ -6,6 +6,7 @@ import logging
 import numpy as np
 from sklearn import metrics
 from torchlibrosa.augmentation import SpecAugmentation
+from util.GaussianSpecAugment import GaussianSpecAugment
 import torch.nn.functional as F
 import math
 import torchaudio.transforms as T
@@ -17,12 +18,17 @@ class HTSAT(pl.LightningModule):
         self.sound_length = sound_length
         # self.spec_aug = SpecAugmentation(time_drop_width=16,time_stripes_num=1,freq_drop_width=8,freq_stripes_num=2) # 时间掩码向上取正值
         self.spec_aug = T.SpecAugment(
-            n_time_masks=2,
+            n_time_masks=0,
             time_mask_param=self.sound_length*16, # 10%
             n_freq_masks=2,
             freq_mask_param=8,
             p=0.5
         )
+        # self.spec_aug = GaussianSpecAugment(
+        #     patch_size=(8,16),
+        #     mask_ratio=0.25,
+        #     cluster_strength=0.50
+        # )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
@@ -31,12 +37,16 @@ class HTSAT(pl.LightningModule):
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
         self.swins = nn.ModuleList([
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
             PatchMergingV2(dim=96),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
             PatchMergingV2(dim=96*2),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
             PatchMergingV2(dim=96*4),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
             PatchMergingV2(dim=96*8)
         ])
@@ -154,10 +164,10 @@ class HTSAT(pl.LightningModule):
             metrics.roc_auc_score(target[:, k], y[:, k], average=None)
             for k in range(self.class_num)
         ]
-        self.log("val_simples",y.shape[0])
-        self.log("val_loss",loss)
-        self.log("val_acc",acc)
-        self.log("val_mAP",np.mean(average_precision_scores))
+        # self.log("val_simples",y.shape[0])
+        self.log("val_loss", loss, sync_dist=True)
+        self.log("val_acc", acc, sync_dist=True)
+        self.log("val_mAP", np.mean(average_precision_scores), sync_dist=True)
         logging.getLogger("lightning.pytorch").info(
             f'Epoch{self.current_epoch:03d}\tvalidation_step\n{confusion_matrix}'
         )

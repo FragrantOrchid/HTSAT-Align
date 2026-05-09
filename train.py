@@ -34,7 +34,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=600//args.sound_length
+    batch_size=200//args.sound_length
 )
 
 # 2. 初始化模型
@@ -54,7 +54,10 @@ checkpoint_callback = ModelCheckpoint(
 refresh_rate=data_module.train_dataloader().__len__()//50
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
-    accelerator="gpu" if torch.cuda.is_available() else "cpu",
+    accelerator="gpu",
+    devices=2,
+    num_nodes=1, 
+    strategy="ddp",
     max_epochs=800,
     callbacks=[
         checkpoint_callback,
@@ -66,8 +69,7 @@ trainer = Trainer(
     logger=[
         CSVLogger(save_dir=args.export_path,name="csv",version=""),
         TensorBoardLogger(save_dir=args.export_path,name=args.report_name,version="",log_graph=True,)
-    ],
-    
+    ]
 )
 logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
 logging.getLogger("lightning.pytorch").addHandler(
