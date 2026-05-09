@@ -35,12 +35,16 @@ class HTSAT(pl.LightningModule):
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
         self.swins = nn.ModuleList([
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
             PatchMergingV2(dim=96),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
             PatchMergingV2(dim=96*2),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
             PatchMergingV2(dim=96*4),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
             PatchMergingV2(dim=96*8)
         ])
@@ -193,12 +197,12 @@ class HTSAT(pl.LightningModule):
             metrics.roc_auc_score(target[:, k], y[:, k], average=None)
             for k in range(self.class_num)
         ]
-        self.log("val_simples",y.shape[0])
-        self.log("val_loss_phoneme", loss_phoneme)
-        self.log("val_loss_word", loss_word)
-        self.log("val_loss_plus",loss_phoneme+loss_word)
-        self.log("val_acc",acc)
-        self.log("val_mAP",np.mean(average_precision_scores))
+        self.log("val_simples",y.shape[0],sync_dist=True)
+        self.log("val_loss_phoneme", loss_phoneme,sync_dist=True)
+        self.log("val_loss_word", loss_word,sync_dist=True)
+        self.log("val_loss_plus",loss_phoneme+loss_word,sync_dist=True)
+        self.log("val_acc",acc,sync_dist=True)
+        self.log("val_mAP",np.mean(average_precision_scores),sync_dist=True)
         logging.getLogger("lightning.pytorch").info(
             f'Epoch{self.current_epoch:03d}\tvalidation_step\n{confusion_matrix}'
         )

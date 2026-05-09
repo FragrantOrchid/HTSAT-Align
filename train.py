@@ -10,10 +10,20 @@ from pytorch_lightning.callbacks import TQDMProgressBar
 import os
 import logging
 import numpy as np
+import warnings
+from sklearn.exceptions import UndefinedMetricWarning
+
 np.set_printoptions(
     threshold=np.inf,
     precision=4,
     linewidth=np.inf
+)
+
+warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+warnings.filterwarnings(
+    "ignore",
+    message="No positive class found in y_true, recall is set to one for all thresholds.",
+    category=UserWarning
 )
 torch.set_float32_matmul_precision('medium')
 parser = argparse.ArgumentParser(description='程序描述')
@@ -34,7 +44,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=600//args.sound_length
+    batch_size=1000//args.sound_length
 )
 
 # 2. 初始化模型
@@ -92,6 +102,7 @@ def load_part_of_state_dict(model, state_dict, strict=False):
             # 检查参数形状是否匹配
             if param.shape == model_state_dict[key].shape:
                 filtered_state_dict[key] = param
+                print(f"加载匹配的参数: {key}, 形状：{param.shape}")
             else:
                 print(f"跳过不匹配的参数: {key}, "
                       f"检查点形状: {param.shape}, 当前模型形状: {model_state_dict[key].shape}")
@@ -113,7 +124,7 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-05-19:20:03]/checkpoints/htsat-epoch=016-val_mAP=0.9191.ckpt"
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-09-00:07:20]/checkpoints/htsat-epoch=025-val_mAP=0.9562.ckpt"
 checkpoint = torch.load(checkpoint_path)
 
 state_dict = checkpoint.get('state_dict', checkpoint)
