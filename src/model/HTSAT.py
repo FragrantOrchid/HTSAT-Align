@@ -17,18 +17,18 @@ class HTSAT(pl.LightningModule):
         self.class_num = class_num
         self.sound_length = sound_length
         # self.spec_aug = SpecAugmentation(time_drop_width=16,time_stripes_num=1,freq_drop_width=8,freq_stripes_num=2) # 时间掩码向上取正值
-        self.spec_aug = T.SpecAugment(
-            n_time_masks=0,
-            time_mask_param=self.sound_length*16, # 10%
-            n_freq_masks=2,
-            freq_mask_param=8,
-            p=0.5
-        )
-        # self.spec_aug = GaussianSpecAugment(
-        #     patch_size=(8,16),
-        #     mask_ratio=0.25,
-        #     cluster_strength=0.50
+        # self.spec_aug = T.SpecAugment(
+        #     n_time_masks=0,
+        #     time_mask_param=self.sound_length*16, # 10%
+        #     n_freq_masks=2,
+        #     freq_mask_param=8,
+        #     p=0.5
         # )
+        self.spec_aug = GaussianSpecAugment(
+            patch_size=(8,16),
+            mask_ratio=0.25,
+            cluster_strength=0.50
+        )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
@@ -43,6 +43,10 @@ class HTSAT(pl.LightningModule):
             SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
             PatchMergingV2(dim=96*2),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
             PatchMergingV2(dim=96*4),

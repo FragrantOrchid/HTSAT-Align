@@ -34,7 +34,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=200//args.sound_length
+    batch_size=160//args.sound_length
 )
 
 # 2. 初始化模型
