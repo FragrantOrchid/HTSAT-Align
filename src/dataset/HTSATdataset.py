@@ -99,7 +99,7 @@ class HTSATdataset(pl.LightningDataModule):
             # env = self.env
 
             # This is a version that won't freeze, but the env needs to be reimplemented every time.
-            env = get_env(location = "/home/u220110626/.cache/LMDBMemory/", name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
+            env = get_env(name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
             # 辅助变量
             filelabels = self.data[index]['labels']
             result = {}

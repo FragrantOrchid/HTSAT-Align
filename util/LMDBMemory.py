@@ -20,7 +20,8 @@ def deserialize_numpy(data: bytes) -> np.ndarray:
     buf = io.BytesIO(data)
     return np.load(buf, allow_pickle=False)
 
-def get_env(location: str, name: str):
+def get_env(name: str, location : str = "$HOME/.cache/LMDBMemory"):
+    location = os.path.expanduser(os.path.expandvars(location))
     # LMDB支持多进程访问，但每个进程需要独立的Env对象
     path = Path(location) / f"{name}.lmdb"
     return lmdb.open(
