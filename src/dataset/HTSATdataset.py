@@ -10,6 +10,8 @@ import os
 from util.PhonemesBinary import getMatrix as getPhonemesBinaryMatrix
 from util.LMDBMemory import get_env, cache
 import hashlib
+import re
+import math
 class HTSATdataset(pl.LightningDataModule):
     # sound_length 单位为秒
     def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size):
@@ -47,9 +49,10 @@ class HTSATdataset(pl.LightningDataModule):
         def __init__(self,datafile,label_csv,sound_length):
             self.sound_length = sound_length
             self.datafile = datafile
-            with open(datafile, 'r') as file:
-                self.data = json.load(file)['data']
-                
+            self.data = pd.read_csv(self.datafile)
+            df = pd.read_csv(label_csv)
+            self.label2index = dict(zip(df["class"], df["index"]))
+            # 数据处理模块
             self.mel_spec = torchaudio.transforms.MelSpectrogram(
                 sample_rate=32000,
                 center=False,
@@ -66,18 +69,14 @@ class HTSATdataset(pl.LightningDataModule):
         def __len__(self):
             return len(self.data)
         
-        def get_phoneme_binary(self, index):
-            filelabels = self.data[index]['labels'].split(',')
-            return np.maximum.reduce([getPhonemesBinaryMatrix(filelabel) for filelabel in filelabels])
-        
-        def get_phoneme_binary_by_labels(self, filelabels:str):
-            filelabels = filelabels.split(',')
-            return np.maximum.reduce([getPhonemesBinaryMatrix(filelabel) for filelabel in filelabels])
         
         def get_log_mel(self, index):
-            filename = self.data[index]['wav']
-            waveform, sr = librosa.load(filename, sr=32000)
-            target_length = self.sound_length * 32000
+            filename = self.data.iloc[index]['wav']
+            filename = os.path.expandvars(filename)
+            start = float(self.data.iloc[index]['start'])
+            end = float(self.data.iloc[index]['end'])
+            waveform, sr = librosa.load(filename, sr=32000, offset=start, duration=end-start)
+            target_length = self.sound_length * sr
             current_length = len(waveform)
             if current_length < target_length:
                 waveform = np.pad(waveform, (0, target_length - current_length), mode='constant')
@@ -89,38 +88,51 @@ class HTSATdataset(pl.LightningDataModule):
             log_mel = self.amp2db(self.mel_spec(waveform))
             return log_mel.numpy().copy()
 
+        def get_target(self, index):
+            labels = self.data.iloc[index]['labels']
+            labels = pd.DataFrame(eval(labels))
+            start = float(self.data.iloc[index]['start'])
+            target = np.zeros((10,43))
+            for _, label in labels.iterrows():
+                phoneme = label["phoneme"]
+                match = re.search(r'(\d+)$', phoneme)
+                if match:
+                    target[
+                        math.floor((float(label["start"])-start)*10):math.ceil((float(label["end"])-start)*10),
+                        self.label2index[match.group(1)]
+                    ] = 1
+                    phoneme = phoneme[:match.start()]
+                target[
+                    math.floor((float(label["start"])-start)*10):math.ceil((float(label["end"])-start)*10),
+                    self.label2index[phoneme]
+                ] = 1
+            return target
+
 
         def __getitem__(self, index):
             # 每个进程单独创建自己的LMDB环境
-
-            # This is the version will freeze
-            # if not hasattr(self, 'env'):
-            #     self.env = get_env(location = "/users/u220110626/.cache/LMDBMemory/", name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
-            # env = self.env
-
             # This is a version that won't freeze, but the env needs to be reimplemented every time.
             env = get_env(name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
             # 辅助变量
-            filelabels = self.data[index]['labels']
+            # filelabels = self.data[index]['labels']
             result = {}
             
             # 特征
-            result["phoneme_target"] = torch.tensor(
-                cache(
-                    env=env,
-                    unique_keys=["filelabels"]
-                )(self.get_phoneme_binary_by_labels)(
-                    filelabels = filelabels
-                ),
-                dtype=torch.float32
-            )
-
             result["log_mel"] = torch.tensor(
                 cache(
                     env=env,
                     unique_keys=["index"]
                 )(self.get_log_mel)(
                     index = index
+                ),
+                dtype=torch.float32
+            )
+            result["target"] = torch.tensor(
+                cache(
+                    env=env,
+                    unique_keys=["index"]
+                )(self.get_target)(
+                    index=index
                 ),
                 dtype=torch.float32
             )

@@ -34,7 +34,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=160//args.sound_length
+    batch_size=360//args.sound_length
 )
 
 # 2. 初始化模型
@@ -55,7 +55,7 @@ refresh_rate=data_module.train_dataloader().__len__()//50
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu",
-    devices=2,
+    devices="auto",
     num_nodes=1, 
     strategy="ddp",
     max_epochs=800,
@@ -115,10 +115,10 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-01-00:11:29]/checkpoints/htsat-epoch=572-val_mAP=0.9689.ckpt"
-checkpoint = torch.load(checkpoint_path)
-
-state_dict = checkpoint.get('state_dict', checkpoint)
+# checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-01-00:11:29]/checkpoints/htsat-epoch=572-val_mAP=0.9689.ckpt"
+# checkpoint = torch.load(checkpoint_path)
+# 
+# state_dict = checkpoint.get('state_dict', checkpoint)
 
 # model = load_part_of_state_dict(model, state_dict, strict=False)
 

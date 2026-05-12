@@ -45,10 +45,6 @@ class HTSAT(pl.LightningModule):
             PatchMergingV2(dim=96*2),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
             PatchMergingV2(dim=96*4),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
@@ -57,7 +53,7 @@ class HTSAT(pl.LightningModule):
         
         self.linear = nn.Linear(
             in_features=96*16,
-            out_features=39
+            out_features=43
         )
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
@@ -71,38 +67,27 @@ class HTSAT(pl.LightningModule):
             patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
 
         patch_tokens = patch_tokens.squeeze(1) # B, W , 96*16
-        # print(f"Patch Tokens {patch_tokens.shape}")
-        phoneme_event = self.linear(patch_tokens) # B, W, 39
-        # print(f"Phoneme Event {phoneme_event.shape}")
-        phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
-        # print(f"Phoneme Login {phoneme_logit.shape}")
-        return phoneme_logit
+        logit = self.linear(patch_tokens) # B, W, C
+        return logit
  
 
 
     
     def training_step(self, batch, batch_idx):
         log_mel = self.spec_aug(batch["log_mel"])
-        phoneme_target = batch["phoneme_target"]
-        
-        phoneme_logit = self(log_mel)
-
-        loss = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
-
+        target = batch["target"]
+        logit = self(log_mel)
+        loss = F.binary_cross_entropy_with_logits(logit,target)
         return loss
 
     def validation_step(self, batch, batch_idx):
         log_mel = batch["log_mel"]
-        phoneme_target = batch["phoneme_target"]
-        
-        phoneme_logit = self(log_mel)
-
-        loss = F.binary_cross_entropy_with_logits(phoneme_logit,phoneme_target)
-
+        target = batch["target"]
+        logit = self(log_mel)
+        loss = F.binary_cross_entropy_with_logits(logit,target)
         # 累积日志
-        self.outputs["phoneme_logit"] = phoneme_logit.float() if self.outputs["phoneme_logit"] is None else torch.cat((self.outputs["phoneme_logit"],phoneme_logit.float()),dim=0)
-        self.outputs["phoneme_target"] = phoneme_target.float() if self.outputs["phoneme_target"] is None else torch.cat((self.outputs["phoneme_target"],phoneme_target.float()),dim=0)
-        
+        self.outputs["logit"] = logit if self.outputs["logit"] is None else torch.cat((self.outputs["logit"],logit),dim=0)
+        self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
         return loss
 
     def configure_optimizers(self):
@@ -143,18 +128,18 @@ class HTSAT(pl.LightningModule):
 
     def on_validation_epoch_start(self):
         self.outputs = {
-            "phoneme_logit" : None,
-            "phoneme_target" : None
+            "logit" : None,
+            "target" : None
         }
     def on_validation_epoch_end(self):
-        phoneme_logit = self.outputs["phoneme_logit"]
-        phoneme_target = self.outputs["phoneme_target"]
+        logit = self.outputs["logit"]
+        target = self.outputs["target"]
 
-        loss = F.binary_cross_entropy_with_logits(phoneme_logit, phoneme_target)
+        loss = F.binary_cross_entropy_with_logits(logit, target)
 
         # numpy
-        y = torch.sigmoid(phoneme_logit).float().detach().cpu().numpy()
-        target = phoneme_target.float().detach().cpu().numpy().astype(int)
+        y = torch.sigmoid(logit).flatten(0,1).float().detach().cpu().numpy()
+        target = target.flatten(0,1).float().detach().cpu().numpy().astype(int)
 
         # calculate
         acc = metrics.accuracy_score(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
