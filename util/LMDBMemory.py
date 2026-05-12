@@ -20,11 +20,12 @@ def deserialize_numpy(data: bytes) -> np.ndarray:
     buf = io.BytesIO(data)
     return np.load(buf, allow_pickle=False)
 
-def get_env(location: str, name: str):
+def get_env(name: str, location : str = "$HOME/.cache/LMDBMemory"):
+    location = os.path.expanduser(os.path.expandvars(location))
     # LMDB支持多进程访问，但每个进程需要独立的Env对象
-    db_path = Path(location) / f"{name}.lmdb"
+    path = Path(location) / f"{name}.lmdb"
     return lmdb.open(
-        str(db_path),
+        str(path),
         map_size=1024**4,
         max_readers=1024,  # 增加最大读者数以支持更多并行进程
         writemap=True    # 使用内存映射写入，提高性能
@@ -53,16 +54,9 @@ def cache(env: lmdb.Environment, unique_keys: List[str]):
                 return deserialize_numpy(value)
             # 读取失败，需要写入
             result = func(*args, **kwargs)
-            
-            # 不考虑写后写，直接覆写
-            asyncio.run(async_write(env=env, key=buffer_key, value=result))
-            
+            value = serialize_numpy(result)
+            with env.begin(write=True) as w:
+                w.put(key=buffer_key, value=value)
             return result
         return wrapper
     return decorator
-
-async def async_write(env,key,value):
-    value = serialize_numpy(value)
-    async_env = lmdb.aio.wrap(env)
-    async with async_env.begin(write=True) as w:
-        await w.put(key=key,value=value)

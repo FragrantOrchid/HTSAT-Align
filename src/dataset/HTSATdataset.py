@@ -110,23 +110,13 @@ class HTSATdataset(pl.LightningDataModule):
             # env = self.env
 
             # This is a version that won't freeze, but the env needs to be reimplemented every time.
-            env = get_env(location = "/users/u220110626/.cache/LMDBMemory/", name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
+            env = get_env(name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
             # 辅助变量
             filelabels = self.data[index]['labels']
             result = {}
             
             # 特征
-            result["phoneme_target"] = torch.tensor(
-                cache(
-                    env=env,
-                    unique_keys=["filelabels"]
-                )(self.get_phoneme_binary_by_labels)(
-                    filelabels = filelabels
-                ),
-                dtype=torch.float32
-            )
-            
-            result["word_target"] = torch.tensor(
+            result["target"] = torch.tensor(
                 cache(
                     env=env,
                     unique_keys=["index"]
