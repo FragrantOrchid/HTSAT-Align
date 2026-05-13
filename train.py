@@ -34,7 +34,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=360//args.sound_length
+    batch_size=240//args.sound_length
 )
 
 # 2. 初始化模型
@@ -58,7 +58,7 @@ trainer = Trainer(
     devices="auto",
     num_nodes=1, 
     strategy="ddp",
-    max_epochs=800,
+    max_epochs=30,
     callbacks=[
         checkpoint_callback,
         TQDMProgressBar(refresh_rate=refresh_rate)

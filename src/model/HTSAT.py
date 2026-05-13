@@ -36,21 +36,42 @@ class HTSAT(pl.LightningModule):
         # all use B,H,W,C 
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
+        # self.swins = nn.ModuleList([
+        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
+        #     PatchMergingV2(dim=96),
+        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
+        #     PatchMergingV2(dim=96*2),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
+        #     PatchMergingV2(dim=96*4),
+        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[2,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[2,8],shift_size=[1,4]),
+        #     PatchMergingV2(dim=96*8)
+        # ])
         self.swins = nn.ModuleList([
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*2),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*4),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*8)
         ])
-        
         self.linear = nn.Linear(
             in_features=96*16,
             out_features=43

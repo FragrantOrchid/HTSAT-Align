@@ -60,9 +60,9 @@ class HTSATdataset(pl.LightningDataModule):
                 hop_length=200, # 0.1*sampel_rate/16
                 win_length=500,
                 n_fft=500,
-                n_mels=64,
-                f_min=80,
-                f_max=8000
+                n_mels=64 # ,
+                # f_min=80,
+                # f_max=8000
             )    
             self.amp2db = torchaudio.transforms.AmplitudeToDB()
             
