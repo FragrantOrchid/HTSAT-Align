@@ -41,54 +41,72 @@ class HTSAT(pl.LightningModule):
         # all use B,H,W,C 
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
+        # self.swins = nn.ModuleList([
+        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
+        #     PatchMergingV2(dim=96),
+        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
+        #     PatchMergingV2(dim=96*2),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
+        #     PatchMergingV2(dim=96*4),
+        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
+        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
+        #     PatchMergingV2(dim=96*8)
+        # ])
         self.swins = nn.ModuleList([
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*2),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*4),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*8)
         ])
         # BCHW
         # 使用简单卷积
-        self.trans = nn.Sequential(
-            PositionalEncoding(96*16, 0.1),
-            nn.TransformerEncoder(
-                encoder_layer=nn.TransformerEncoderLayer(
-                    d_model=96*16,
-                    nhead=4,
-                    dropout=0.1,
-                    batch_first=True
-                ),
-                num_layers=6
-            )
-        )
+        # self.trans = nn.Sequential(
+        #     PositionalEncoding(96*16, 0.1),
+        #     nn.TransformerEncoder(
+        #         encoder_layer=nn.TransformerEncoderLayer(
+        #             d_model=96*16,
+        #             nhead=4,
+        #             dropout=0.1,
+        #             batch_first=True
+        #         ),
+        #         num_layers=6
+        #     )
+        # )
         # self.linear = nn.Linear(
         #     in_features=96*16,
         #     out_features=43
         # )
         # 
         # # 使用LSTM模块
-        # self.lstm = nn.LSTM(
-        #     input_size=43,
-        #     hidden_size=96*4,
-        #     num_layers=2,
-        #     bidirectional=True,
-        #     batch_first=True
-        # )
+        self.lstm = nn.LSTM(
+            input_size=96*16,
+            hidden_size=96*16,
+            num_layers=2,
+            bidirectional=True,
+            batch_first=True
+        )
         # self.proj = nn.Sequential(
         #     nn.Linear(2 * 96, 35, bias=True),
         #     nn.GELU(),               # 或 ReLU/Tanh
         #     nn.Dropout(0.0)
         # )
         self.proj = nn.Linear(
-            in_features=96*16,
+            in_features=96*32,
             out_features=self.class_num
         )
         # 
@@ -102,18 +120,20 @@ class HTSAT(pl.LightningModule):
         for model in self.swins:
             patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
 
-        trans_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B, W, C
-        
-        trans_output = self.trans(trans_input)
-        
-        trans_output = trans_output.mean(dim=1)
-        
-        logit = self.proj(trans_output)
+        # trans_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B, W, C
+        # 
+        # trans_output = self.trans(trans_input)
+        # 
+        # trans_output = trans_output.mean(dim=1)
+        # 
+        # logit = self.proj(trans_output)
+
+        lstm_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B,W,C
         # phoneme_event = phoneme_event.squeeze(1) # B,W,C
         # lstm_input = phoneme_event.permute(0,2,3,1).squeeze(-1) # B, W, C
-        # lstm_out, (h_n, c_n) = self.lstm(lstm_input)
-        # 
-        # logit = self.proj(lstm_out[:,-1,:])
+        lstm_out, (h_n, c_n) = self.lstm(lstm_input)
+
+        logit = self.proj(torch.cat([h_n[-2],h_n[-1]],dim=-1))
         # phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
         return logit
