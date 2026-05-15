@@ -10,6 +10,7 @@ from util.GaussianSpecAugment import GaussianSpecAugment
 import torch.nn.functional as F
 import math
 import torchaudio.transforms as T
+from src.layer.Permute import Permute
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
@@ -29,32 +30,17 @@ class HTSAT(pl.LightningModule):
             mask_ratio=0.25,
             cluster_strength=0.50
         )
-        # B,C,H,W()
+        # B,C,H,W() -> B,H,W,C
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
-        self.patch_embed = nn.Conv2d(in_channels=1,out_channels=96,kernel_size=(4,1),stride=(4,1),padding=0)
-        # all use B,H,W,C 
-        # Input: B,16,sound_length*160,96
-        # Output: B,1,sound_length*10,96*16
-        # self.swins = nn.ModuleList([
-        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
-        #     PatchMergingV2(dim=96),
-        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
-        #     PatchMergingV2(dim=96*2),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[4,8],shift_size=[2,4]),
-        #     PatchMergingV2(dim=96*4),
-        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[2,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[2,8],shift_size=[1,4]),
-        #     PatchMergingV2(dim=96*8)
-        # ])
-        self.swins = nn.ModuleList([
+        self.patch_embed = nn.Sequential(
+            nn.Conv2d(in_channels=1,out_channels=96,kernel_size=(8,1),stride=(8,1),padding=0),
+            Permute(0,2,3,1)
+        )
+        
+        
+        # B,H,W,C
+        self.swins_transformer = nn.Sequential(
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96),
@@ -71,7 +57,7 @@ class HTSAT(pl.LightningModule):
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*8)
-        ])
+        )
         self.linear = nn.Linear(
             in_features=96*16,
             out_features=43
@@ -83,11 +69,10 @@ class HTSAT(pl.LightningModule):
     def forward(self,x):
         # x: B,C,H,W
         patch_tokens = self.patch_embed(x) # B,C,H,W
-        patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
-        for model in self.swins:
-            patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
+        # print(f"patch_tokens shape {patch_tokens.shape}")
+        swin_output = self.swins_transformer(patch_tokens)
 
-        patch_tokens = patch_tokens.squeeze(1) # B, W , 96*16
+        patch_tokens = swin_output.squeeze(1) # B, W , 96*16
         logit = self.linear(patch_tokens) # B, W, C
         return logit
  
@@ -95,6 +80,9 @@ class HTSAT(pl.LightningModule):
 
     
     def training_step(self, batch, batch_idx):
+        if batch_idx == 0:
+            print(f"\nlog_mel shape {batch['log_mel'].shape}")
+            print(f"\ntarget shape {batch['target'].shape}")
         log_mel = self.spec_aug(batch["log_mel"])
         target = batch["target"]
         logit = self(log_mel)
