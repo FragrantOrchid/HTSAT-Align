@@ -44,7 +44,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=1800//args.sound_length
+    batch_size=800//args.sound_length
 )
 
 # 2. 初始化模型
@@ -124,7 +124,8 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110614/HLHTSAT/export/[2026-05-13-01:09:43]/checkpoints/htsat-epoch=016-val_mAP=0.9195.ckpt"
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-16-01:30:13]/checkpoints/htsat-epoch=016-val_mAP=0.9178.ckpt"
+print(f"load from {checkpoint_path}")
 checkpoint = torch.load(checkpoint_path)
 state_dict = checkpoint.get('state_dict', checkpoint)
 model = load_part_of_state_dict(model, state_dict, strict=False)
@@ -132,14 +133,15 @@ model = load_part_of_state_dict(model, state_dict, strict=False)
 # 冻结部分参数
 for param in model.patch_embed.parameters():
     param.requires_grad = False
-for param in model.swins.parameters():
+for param in model.swins_transformer.parameters():
     param.requires_grad = False
-# for param in model.linear.parameters():
-#     param.requires_grad = False
+for param in model.linear.parameters():
+    param.requires_grad = False
     
 trainer.fit(
     model,
-    datamodule=data_module
+    datamodule=data_module,
+    ckpt_path=None
 )
 
 

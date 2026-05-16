@@ -51,18 +51,20 @@ class HTSATdataset(pl.LightningDataModule):
                 self.data = json.load(file)['data']
             self.labels = pd.read_csv(label_csv)
                 
-            self.mel_spec = torchaudio.transforms.MelSpectrogram(
-                sample_rate=32000,
-                center=False,
-                pad=150,
-                hop_length=200, # 0.1*sampel_rate/16
-                win_length=500,
-                n_fft=500,
-                n_mels=64 # ,
-                # f_min=80,
-                # f_max=8000
-            )    
-            self.amp2db = torchaudio.transforms.AmplitudeToDB()
+            self.wav2log_mel = torch.nn.Sequential(
+                torchaudio.transforms.MelSpectrogram(
+                    sample_rate=32000,
+                    center=False,
+                    pad=462,
+                    hop_length=100, 
+                    win_length=1024,
+                    n_fft=1024,
+                    n_mels=128,
+                    f_min=20,
+                    f_max=8000
+                ),
+                torchaudio.transforms.AmplitudeToDB()
+            )
             
         def __len__(self):
             return len(self.data)
@@ -97,10 +99,13 @@ class HTSATdataset(pl.LightningDataModule):
             waveform = waveform - np.mean(waveform)
             waveform = torch.unsqueeze(torch.from_numpy(waveform), dim=0)
 
-            log_mel = self.amp2db(self.mel_spec(waveform))
+            log_mel = self.wav2log_mel(waveform)
             return log_mel.numpy().copy()
 
-
+        def get_filename(self, index):
+            filename = self.data[index]['wav']
+            return filename
+            
         def __getitem__(self, index):
             # 每个进程单独创建自己的LMDB环境
 

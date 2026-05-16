@@ -14,6 +14,7 @@ from src.layer.TemporalAwareAttention import TemporalAwareAttention
 from src.layer.SGMWithGEModule import SGMWithGEModule
 import torchaudio.transforms as T
 from util.GaussianSpecAugment import GaussianSpecAugment
+from src.layer.Permute import Permute
 import math
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
@@ -22,40 +23,29 @@ class HTSAT(pl.LightningModule):
         self.class_num = class_num
         self.sound_length = sound_length
         # self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
-        # self.spec_aug = T.SpecAugment(
-        #     n_time_masks=2,
-        #     time_mask_param=self.sound_length*16, # 10%
-        #     n_freq_masks=2,
-        #     freq_mask_param=8,
-        #     p=0.5
-        # )
-        self.spec_aug = GaussianSpecAugment(
-            patch_size=(8,16),
-            mask_ratio=0.25,
-            cluster_strength=0.50
+        self.spec_aug = T.SpecAugment(
+            n_time_masks=2,
+            time_mask_param=self.sound_length*32, # 10%
+            n_freq_masks=0,
+            freq_mask_param=8,
+            p=0.5
         )
+        # self.spec_aug = GaussianSpecAugment(
+        #     patch_size=(8,16),
+        #     mask_ratio=0.25,
+        #     cluster_strength=0.50
+        # )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
-        self.patch_embed = nn.Conv2d(in_channels=1,out_channels=96,kernel_size=(4,1),stride=(4,1),padding=0)
+        self.patch_embed = nn.Sequential(
+            nn.Conv2d(in_channels=1,out_channels=96,kernel_size=(8,1),stride=(8,1),padding=0),
+            Permute(0,2,3,1)
+        )
         # all use B,H,W,C 
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
-        # self.swins = nn.ModuleList([
-        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[8,8],shift_size=[4,4]),
-        #     PatchMergingV2(dim=96),
-        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[8,8],shift_size=[4,4]),
-        #     PatchMergingV2(dim=96*2),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[8,4],shift_size=[4,2]),
-        #     PatchMergingV2(dim=96*4),
-        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[0,0]),
-        #     SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[8,2],shift_size=[4,1]),
-        #     PatchMergingV2(dim=96*8)
-        # ])
-        self.swins = nn.ModuleList([
+        self.swins_transformer = nn.Sequential(
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96),
@@ -72,7 +62,12 @@ class HTSAT(pl.LightningModule):
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
             PatchMergingV2(dim=96*8)
-        ])
+        )
+        
+        self.linear = nn.Linear(
+            in_features=96*16,
+            out_features=47
+        )
         # BCHW
         # 使用简单卷积
         # self.trans = nn.Sequential(
@@ -94,8 +89,8 @@ class HTSAT(pl.LightningModule):
         # 
         # # 使用LSTM模块
         self.lstm = nn.LSTM(
-            input_size=96*16,
-            hidden_size=96*16,
+            input_size=47,
+            hidden_size=96*8,
             num_layers=2,
             bidirectional=True,
             batch_first=True
@@ -106,7 +101,7 @@ class HTSAT(pl.LightningModule):
         #     nn.Dropout(0.0)
         # )
         self.proj = nn.Linear(
-            in_features=96*32,
+            in_features=96*16,
             out_features=self.class_num
         )
         # 
@@ -115,22 +110,12 @@ class HTSAT(pl.LightningModule):
     
     def forward(self,x):
         # x: B,C,H,W
-        patch_tokens = self.patch_embed(x) # B,C,H,W
-        patch_tokens = patch_tokens.permute(0, 2, 3, 1) # BHWC
-        for model in self.swins:
-            patch_tokens = model(patch_tokens) # B,H/(P*8),W(P*8),C*8
+        patch_tokens = self.patch_embed(x) # B,H,W,C
+        # print(f"patch_tokens shape {patch_tokens.shape}")
+        swin_output = self.swins_transformer(patch_tokens) # B,H,W,C
 
-        # trans_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B, W, C
-        # 
-        # trans_output = self.trans(trans_input)
-        # 
-        # trans_output = trans_output.mean(dim=1)
-        # 
-        # logit = self.proj(trans_output)
-
-        lstm_input = patch_tokens.permute(0,2,3,1).squeeze(-1) # B,W,C
-        # phoneme_event = phoneme_event.squeeze(1) # B,W,C
-        # lstm_input = phoneme_event.permute(0,2,3,1).squeeze(-1) # B, W, C
+        lstm_input = self.linear(swin_output.squeeze(1)) # B, W , C'
+        lstm_input = torch.sigmoid(lstm_input)
         lstm_out, (h_n, c_n) = self.lstm(lstm_input)
 
         logit = self.proj(torch.cat([h_n[-2],h_n[-1]],dim=-1))
@@ -142,8 +127,8 @@ class HTSAT(pl.LightningModule):
 
     
     def training_step(self, batch, batch_idx):
-        # log_mel = self.spec_aug(batch["log_mel"])
-        log_mel = batch["log_mel"]
+        log_mel = self.spec_aug(batch["log_mel"])
+        # log_mel = batch["log_mel"]
         target = batch["target"]
         
         logit = self(log_mel)
@@ -240,6 +225,13 @@ class HTSAT(pl.LightningModule):
             logging.getLogger("lightning.pytorch").info(
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
+        y_true=np.argmax(target,1)
+        y_pred=np.argmax(y,1)
+        for index in range(y.shape[0]):
+            if y_true[index] != y_pred[index]:
+                    logging.getLogger("lightning.pytorch").info(
+                        f'{y_true[index]} -> {y_pred[index]} : {self.trainer.val_dataloaders.dataset.get_filename(index)}'
+                    )
         """
         validate_map = {
             "9->9" : [],
