@@ -92,21 +92,31 @@ class HTSATdataset(pl.LightningDataModule):
             log_mel = self.wav2log_mel(waveform)
             return log_mel.numpy().copy()
 
-        # (20,43)
+        # (20,47)
         def get_target(self, index):
             labels = self.data.iloc[index]['labels']
             labels = pd.DataFrame(eval(labels))
             start = float(self.data.iloc[index]['start'])
-            target = np.zeros((20,43))
+            target = np.zeros((20,47))
             for _, label in labels.iterrows():
                 phoneme = label["phoneme"]
-                match = re.search(r'(\d+)$', phoneme)
+                match = re.search(r'(\D*)(\d+)(\D*)', phoneme)
+                # self.print(f'Begin {math.floor((float(label["start"])-start)*20)}')
+                # self.print(f'End {math.ceil((float(label["end"])-start)*20)}')
+                # numpy右侧开区间，所以ceil
                 if match:
+                    # 重音
                     target[
                         math.floor((float(label["start"])-start)*20):math.ceil((float(label["end"])-start)*20),
-                        self.label2index[match.group(1)]
+                        self.label2index[match.group(2)]
                     ] = 1
-                    phoneme = phoneme[:match.start()]
+                    # 位置
+                    target[
+                        math.floor((float(label["start"])-start)*20):math.ceil((float(label["end"])-start)*20),
+                        self.label2index[match.group(3)]
+                    ] = 1
+                    phoneme = match.group(1)
+                # 音素本体
                 target[
                     math.floor((float(label["start"])-start)*20):math.ceil((float(label["end"])-start)*20),
                     self.label2index[phoneme]

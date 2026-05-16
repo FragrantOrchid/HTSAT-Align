@@ -28,7 +28,7 @@ class HTSAT(pl.LightningModule):
         self.spec_aug = GaussianSpecAugment(
             patch_size=(8,16),
             mask_ratio=0.25,
-            cluster_strength=0.50
+            cluster_strength=(0.35,0.50)
         )
         # B,C,H,W() -> B,H,W,C
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
@@ -60,7 +60,7 @@ class HTSAT(pl.LightningModule):
         )
         self.linear = nn.Linear(
             in_features=96*16,
-            out_features=43
+            out_features=self.class_num
         )
         
         self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
