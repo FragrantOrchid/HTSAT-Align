@@ -122,7 +122,7 @@ class HTSAT(pl.LightningModule):
         logit = self.proj(torch.cat([h_n[-2],h_n[-1]],dim=-1))
         # phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
-        return logit, self.linear(swin_output.squeeze(1))
+        return logit
  
 
 
