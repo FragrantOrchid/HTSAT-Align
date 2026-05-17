@@ -89,8 +89,8 @@ class HTSAT(pl.LightningModule):
         # 
         # # 使用LSTM模块
         self.lstm = nn.LSTM(
-            input_size=47,
-            hidden_size=96*8,
+            input_size=96*16,
+            hidden_size=96*16,
             num_layers=2,
             bidirectional=True,
             batch_first=True
@@ -101,7 +101,7 @@ class HTSAT(pl.LightningModule):
         #     nn.Dropout(0.0)
         # )
         self.proj = nn.Linear(
-            in_features=96*16,
+            in_features=96*32,
             out_features=self.class_num
         )
         # 
@@ -114,14 +114,15 @@ class HTSAT(pl.LightningModule):
         # print(f"patch_tokens shape {patch_tokens.shape}")
         swin_output = self.swins_transformer(patch_tokens) # B,H,W,C
 
-        lstm_input = self.linear(swin_output.squeeze(1)) # B, W , C'
-        lstm_input = torch.sigmoid(lstm_input)
+        # lstm_input = self.linear(swin_output.squeeze(1)) # B, W , C'
+        # lstm_input = torch.sigmoid(lstm_input)
+        lstm_input = swin_output.squeeze(1)
         lstm_out, (h_n, c_n) = self.lstm(lstm_input)
 
         logit = self.proj(torch.cat([h_n[-2],h_n[-1]],dim=-1))
         # phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
-        return logit
+        return logit, self.linear(swin_output.squeeze(1))
  
 
 
@@ -230,27 +231,8 @@ class HTSAT(pl.LightningModule):
         for index in range(y.shape[0]):
             if y_true[index] != y_pred[index]:
                     logging.getLogger("lightning.pytorch").info(
-                        f'{y_true[index]} -> {y_pred[index]} : {self.trainer.val_dataloaders.dataset.get_filename(index)}'
+                        f'Index={index},{y_true[index]} -> {y_pred[index]} : {self.trainer.val_dataloaders.dataset.get_filename(index)}'
                     )
-        """
-        validate_map = {
-            "9->9" : [],
-            "9->10" : [],
-            "10->10" : []
-        }
-        y_true=np.argmax(target,1)
-        y_pred=np.argmax(y,1)
-        for index in range(y.shape[0]):
-            if y_true[index] == 9 and y_pred[index] == 9:
-                validate_map["9->9"].append(index)
-            if y_true[index] == 9 and y_pred[index] == 10:
-                validate_map["9->10"].append(index)
-            if y_true[index] == 10 and y_pred[index] == 10:
-                validate_map["10->10"].append(index)
-                
-        logging.getLogger("lightning.pytorch").info(
-            f'{validate_map}'
-        )"""
 class PositionalEncoding(nn.Module):
     """位置编码（若输入未包含时序信息）"""
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
