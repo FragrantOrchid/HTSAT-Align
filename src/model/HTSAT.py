@@ -34,8 +34,10 @@ class HTSAT(pl.LightningModule):
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
         self.patch_embed = nn.Sequential(
+            nn.LayerNorm([128,320]),
             nn.Conv2d(in_channels=1,out_channels=96,kernel_size=(8,1),stride=(8,1),padding=0),
-            Permute(0,2,3,1)
+            Permute(0,2,3,1),
+            nn.LayerNorm([96])
         )
         
         
@@ -80,9 +82,9 @@ class HTSAT(pl.LightningModule):
 
     
     def training_step(self, batch, batch_idx):
-        if batch_idx == 0:
-            print(f"\nlog_mel shape {batch['log_mel'].shape}")
-            print(f"\ntarget shape {batch['target'].shape}")
+        # if batch_idx == 0:
+        #     print(f"\nlog_mel shape {batch['log_mel'].shape}")
+        #     print(f"\ntarget shape {batch['target'].shape}")
         log_mel = self.spec_aug(batch["log_mel"])
         target = batch["target"]
         logit = self(log_mel)
