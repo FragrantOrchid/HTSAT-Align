@@ -11,6 +11,7 @@ import torch.nn.functional as F
 import math
 import torchaudio.transforms as T
 from src.layer.Permute import Permute
+import tracemalloc
 class HTSAT(pl.LightningModule):
     def __init__(self, class_num: int, sound_length: int):
         super().__init__()
@@ -89,6 +90,7 @@ class HTSAT(pl.LightningModule):
         target = batch["target"]
         logit = self(log_mel)
         loss = F.binary_cross_entropy_with_logits(logit,target)
+        self.log("train_loss", loss, on_epoch=True, on_step=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
