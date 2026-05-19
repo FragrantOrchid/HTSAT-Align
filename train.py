@@ -61,7 +61,7 @@ trainer = Trainer(
     max_epochs=30,
     callbacks=[
         checkpoint_callback,
-        TQDMProgressBar(refresh_rate=refresh_rate)
+        TQDMProgressBar(refresh_rate=1)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -126,7 +126,7 @@ def load_part_of_state_dict(model, state_dict, strict=False):
 trainer.fit(
     model,
     datamodule=data_module,
-    ckpt_path=None
+    ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-19-00:55:06]/checkpoints/htsat-epoch=000-val_mAP=0.7668.ckpt"
 )
 
 
