@@ -1,12 +1,19 @@
 import torch
 from torch import Tensor
 import torch.nn.functional as F
+from typing import Tuple, Union
+import random
 class GaussianSpecAugment(torch.nn.Module):
-    def __init__(self, patch_size, mask_ratio, cluster_strength):
+    def __init__(self, patch_size, mask_ratio, cluster_strength:Union[float,Tuple[float,float]]):
         super(GaussianSpecAugment, self).__init__()
         self.patch_size = patch_size
         self.mask_ratio = mask_ratio
-        self.cluster_strength = cluster_strength
+        
+        # 判断cluster_strength是float还是tuple，如果是float，变成一个两个数值相同的tuple
+        if isinstance(cluster_strength, float):
+            self.cluster_strength = (cluster_strength, cluster_strength)
+        else:
+            self.cluster_strength = cluster_strength
 
     def forward(self, specgram: Tensor) -> Tensor:
         B, C, H, W = specgram.shape
@@ -19,7 +26,7 @@ class GaussianSpecAugment(torch.nn.Module):
             reshaped_spec,
             self.patch_size,
             self.mask_ratio,
-            self.cluster_strength
+            random.uniform(*self.cluster_strength)
         )
         
         # Reshape back to original dimensions

@@ -44,7 +44,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=800//args.sound_length
+    batch_size=112//args.sound_length
 )
 
 # 2. 初始化模型
@@ -61,7 +61,7 @@ checkpoint_callback = ModelCheckpoint(
     save_top_k=5,
     mode="max"
 )
-refresh_rate=data_module.train_dataloader().__len__()//10
+refresh_rate=data_module.train_dataloader().__len__()//10+1
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -124,24 +124,24 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-17-13:09:25]/checkpoints/htsat-epoch=017-val_mAP=0.9185.ckpt"
-print(f"load from {checkpoint_path}")
-checkpoint = torch.load(checkpoint_path)
-state_dict = checkpoint.get('state_dict', checkpoint)
-model = load_part_of_state_dict(model, state_dict, strict=False)
+# checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-18-12:27:54]/checkpoints/htsat-epoch=150-val_mAP=0.9881.ckpt"
+# print(f"load from {checkpoint_path}")
+# checkpoint = torch.load(checkpoint_path)
+# state_dict = checkpoint.get('state_dict', checkpoint)
+# model = load_part_of_state_dict(model, state_dict, strict=False)
 
 # 冻结部分参数
-for param in model.patch_embed.parameters():
-    param.requires_grad = False
-for param in model.swins_transformer.parameters():
-    param.requires_grad = False
-for param in model.linear.parameters():
-    param.requires_grad = False
+# for param in model.patch_embed.parameters():
+#     param.requires_grad = False
+# for param in model.swins_transformer.parameters():
+#     param.requires_grad = False
+# for param in model.linear.parameters():
+#     param.requires_grad = False
     
 trainer.fit(
     model,
     datamodule=data_module,
-    ckpt_path=None
+    ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-19-22:30:23]/checkpoints/htsat-epoch=015-val_mAP=0.9948.ckpt"
 )
 
 
