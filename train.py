@@ -51,7 +51,7 @@ checkpoint_callback = ModelCheckpoint(
     save_top_k=5,
     mode="max"
 )
-refresh_rate=data_module.train_dataloader().__len__()//50
+refresh_rate=data_module.train_dataloader().__len__()//50+1
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu",
@@ -61,7 +61,7 @@ trainer = Trainer(
     max_epochs=30,
     callbacks=[
         checkpoint_callback,
-        TQDMProgressBar(refresh_rate=1)
+        TQDMProgressBar(refresh_rate=refresh_rate)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -126,7 +126,7 @@ def load_part_of_state_dict(model, state_dict, strict=False):
 trainer.fit(
     model,
     datamodule=data_module,
-    ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-19-00:55:06]/checkpoints/htsat-epoch=000-val_mAP=0.7668.ckpt"
+    ckpt_path=None
 )
 
 

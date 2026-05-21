@@ -9,16 +9,19 @@ from typing import List
 import lmdb.aio
 import asyncio
 
+
 def serialize_numpy(arr: np.ndarray) -> bytes:
     """将 numpy 数组序列化为 bytes"""
     buf = io.BytesIO()
     np.save(buf, arr, allow_pickle=False)
     return buf.getvalue()
 
+
 def deserialize_numpy(data: bytes) -> np.ndarray:
     """将 bytes 反序列化为 numpy 数组"""
     buf = io.BytesIO(data)
     return np.load(buf, allow_pickle=False)
+
 
 def get_env(name: str, location : str = "$HOME/.cache/LMDBMemory"):
     location = os.path.expanduser(os.path.expandvars(location))
@@ -34,6 +37,9 @@ def get_env(name: str, location : str = "$HOME/.cache/LMDBMemory"):
 def cache(env: lmdb.Environment, unique_keys: List[str]):
     def decorator(func):
         def wrapper(*args, **kwargs):
+            # 无环境则跳过
+            if env == None:
+                return func(*args, **kwargs)
             # 获取函数签名
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)
