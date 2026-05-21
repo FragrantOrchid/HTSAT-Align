@@ -23,18 +23,18 @@ class HTSAT(pl.LightningModule):
         self.class_num = class_num
         self.sound_length = sound_length
         # self.spec_aug = SpecAugmentation(time_drop_width=64,time_stripes_num=sound_length*2//5,freq_drop_width=8,freq_stripes_num=2)
-        # self.spec_aug = T.SpecAugment(
-        #     n_time_masks=2,
-        #     time_mask_param=self.sound_length*32, # 10%
-        #     n_freq_masks=0,
-        #     freq_mask_param=8,
-        #     p=0.5
-        # )
-        self.spec_aug = GaussianSpecAugment(
-            patch_size=(8,16),
-            mask_ratio=0.25,
-            cluster_strength=(0.35,0.50)
+        self.spec_aug = T.SpecAugment(
+            n_time_masks=2,
+            time_mask_param=self.sound_length*32, # 10%
+            n_freq_masks=0,
+            freq_mask_param=8,
+            p=0.5
         )
+        # self.spec_aug = GaussianSpecAugment(
+        #     patch_size=(8,16),
+        #     mask_ratio=0.25,
+        #     cluster_strength=(0.35,0.50)
+        # )
         # B,C,H,W()
         # Input: B,2 if self.vowel_embed else 1,64,sound_length*160
         # Output: B,96,16,sound_length*160
@@ -158,7 +158,7 @@ class HTSAT(pl.LightningModule):
         # 1. 优化器配置 (AdamW)
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.parameters()),
-            lr=1e-6,  # 初始学习率（建议从1e-4开始，根据任务调整）
+            lr=1e-5,  # 初始学习率（建议从1e-4开始，根据任务调整）
             betas=(0.9, 0.999),
             eps=1e-8,
             weight_decay=0.05,  # 适用于Transformer类模型的权重衰减
