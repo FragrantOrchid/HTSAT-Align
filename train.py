@@ -44,7 +44,7 @@ data_module = HTSATdataset(
     val_file=args.val_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=980//args.sound_length
+    batch_size=114//args.sound_length # 980,114
 )
 
 # 2. 初始化模型
@@ -54,10 +54,17 @@ model = HTSAT(
 )
 
 # 3. 配置训练器
-checkpoint_callback = ModelCheckpoint(
+checkpoint_callback_map = ModelCheckpoint(
     monitor="val_mAP",
     dirpath=os.path.join(args.export_path,"checkpoints"),
     filename="htsat-{epoch:03d}-{val_mAP:.4f}",
+    save_top_k=5,
+    mode="max"
+)
+checkpoint_callback_acc = ModelCheckpoint(
+    monitor="val_acc",
+    dirpath=os.path.join(args.export_path,"checkpoints"),
+    filename="htsat-{epoch:03d}-{val_acc:.4f}",
     save_top_k=5,
     mode="max"
 )
@@ -65,9 +72,10 @@ refresh_rate=data_module.train_dataloader().__len__()//10+1
 print(f"Set refresh rate as {refresh_rate}")
 trainer = Trainer(
     accelerator="gpu" if torch.cuda.is_available() else "cpu",
-    max_epochs=800,
+    max_epochs=100,
     callbacks=[
-        checkpoint_callback,
+        checkpoint_callback_map,
+        checkpoint_callback_acc,
         TQDMProgressBar(refresh_rate=refresh_rate)
     ],
     log_every_n_steps=10,
@@ -124,30 +132,30 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-# checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-20-23:32:56]/checkpoints/htsat-epoch=009-val_mAP=0.9462.ckpt"
-# print(f"load from {checkpoint_path}")
-# checkpoint = torch.load(checkpoint_path)
-# state_dict = checkpoint.get('state_dict', checkpoint)
-# model = load_part_of_state_dict(model, state_dict, strict=False)
+checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-23-19:31:18]/checkpoints/htsat-epoch=026-val_acc=0.9662.ckpt"
+print(f"load from {checkpoint_path}")
+checkpoint = torch.load(checkpoint_path)
+state_dict = checkpoint.get('state_dict', checkpoint)
+model = load_part_of_state_dict(model, state_dict, strict=False)
 
 # 冻结部分参数
-for param in model.patch_embed.parameters():
-    param.requires_grad = False
-for param in model.swins_transformer.parameters():
-    param.requires_grad = False
-for param in model.linear.parameters():
-    param.requires_grad = False
+# for param in model.patch_embed.parameters():
+#     param.requires_grad = False
+# for param in model.swins_transformer.parameters():
+#     param.requires_grad = False
+# for param in model.linear.parameters():
+#     param.requires_grad = False
     
 trainer.fit(
     model,
     datamodule=data_module,
-    ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-21-20:12:36]/checkpoints/htsat-epoch=089-val_mAP=0.9749.ckpt"
+    ckpt_path=None
 )
 
 
 # trainer.validate(
 #     model,
 #     datamodule=data_module,
-#     ckpt_path=None
+#     ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-24-10:24:46]/checkpoints/htsat-epoch=020-val_acc=0.9829.ckpt"
 # )
 
