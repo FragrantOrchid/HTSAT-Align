@@ -7,15 +7,16 @@ import pandas as pd
 import logging
 import librosa
 import os
-from util.PhonemesBinary import getMatrix as getPhonemesBinaryMatrix
+# from util.PhonemesBinary import getMatrix as getPhonemesBinaryMatrix
 from util.LMDBMemory import get_env, cache
 import hashlib
 class HTSATdataset(pl.LightningDataModule):
     # sound_length 单位为秒
-    def __init__(self, train_file, val_file, label_csv, sound_length: int, batch_size):
+    def __init__(self, train_file, val_file, test_file, label_csv, sound_length: int, batch_size):
         super().__init__()
         self.train_file = train_file
         self.val_file = val_file
+        self.test_file = test_file
         self.label_vsc = label_csv
         self.sound_length = sound_length
         self.batch_size = batch_size
@@ -43,6 +44,17 @@ class HTSATdataset(pl.LightningDataModule):
             pin_memory=True,
             prefetch_factor = 2
         )
+    def test_dataloader(self):
+        dataset = self.HTSATsubdataset(self.test_file,self.label_vsc,self.sound_length)
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
+            shuffle=False,  # 验证集不需要 shuffle
+            num_workers=self.n_proc,
+            pin_memory=True,
+            prefetch_factor = 2
+        )
+        
     class HTSATsubdataset(Dataset):
         def __init__(self,datafile,label_csv,sound_length):
             self.sound_length = sound_length

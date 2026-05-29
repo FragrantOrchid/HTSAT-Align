@@ -29,6 +29,7 @@ torch.set_float32_matmul_precision('medium')
 parser = argparse.ArgumentParser(description='程序描述')
 parser.add_argument("-train_file", required=True, help="训练文件路径")
 parser.add_argument("-val_file", required=True, help="验证文件路径")
+parser.add_argument("-test_file", required=True, help="测试文件路径")
 parser.add_argument("-label_csv", required=True, help="标签CSV文件路径")
 parser.add_argument("-class_num", type=int, required=True, help="类别数量")
 parser.add_argument("-sound_length", type=int, required=True, help="声音长度")
@@ -42,6 +43,7 @@ print(args)
 data_module = HTSATdataset(
     train_file=args.train_file,
     val_file=args.val_file,
+    test_file=args.test_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
     batch_size=114//args.sound_length # 980,114
@@ -132,11 +134,12 @@ def load_part_of_state_dict(model, state_dict, strict=False):
     
     return model
 
-checkpoint_path = "/home/u220110626/HLHTSAT/export/[2026-05-23-19:31:18]/checkpoints/htsat-epoch=026-val_acc=0.9662.ckpt"
-print(f"load from {checkpoint_path}")
-checkpoint = torch.load(checkpoint_path)
-state_dict = checkpoint.get('state_dict', checkpoint)
-model = load_part_of_state_dict(model, state_dict, strict=False)
+# checkpoint_path = "/root/data/Export/[2026-05-26-13:33:16]/checkpoints/htsat-epoch=024-val_mAP=0.9569.ckpt"
+# checkpoint_path = "./export/[2026-05-28-13:57:23]/checkpoints/htsat-epoch=023-val_acc=0.9706.ckpt"
+# print(f"load from {checkpoint_path}")
+# checkpoint = torch.load(checkpoint_path)
+# state_dict = checkpoint.get('state_dict', checkpoint)
+# model = load_part_of_state_dict(model, state_dict, strict=False)
 
 # 冻结部分参数
 # for param in model.patch_embed.parameters():
@@ -146,11 +149,11 @@ model = load_part_of_state_dict(model, state_dict, strict=False)
 # for param in model.linear.parameters():
 #     param.requires_grad = False
     
-trainer.fit(
-    model,
-    datamodule=data_module,
-    ckpt_path=None
-)
+# trainer.fit(
+#     model,
+#     datamodule=data_module,
+#     ckpt_path=None
+# )
 
 
 # trainer.validate(
@@ -158,4 +161,10 @@ trainer.fit(
 #     datamodule=data_module,
 #     ckpt_path="/home/u220110626/HLHTSAT/export/[2026-05-24-10:24:46]/checkpoints/htsat-epoch=020-val_acc=0.9829.ckpt"
 # )
+
+trainer.test(
+    model,
+    datamodule=data_module,
+    ckpt_path="./export/[2026-05-28-20:07:25]/checkpoints/htsat-epoch=020-val_acc=0.9838.ckpt"
+)
 
