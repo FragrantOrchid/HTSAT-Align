@@ -1,0 +1,1 @@
+get acc=0.9845525026321411 at google speechcommandv2
