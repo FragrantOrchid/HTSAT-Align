@@ -1,9 +1,10 @@
 __pycache__
-/data
+/data/*
+!/data/LibriSpeech-Alignment-BIES/
+!/data/LibriSpeech-Alignment-BIES/**
 /export
 /temp
 /.vscode
 /testbench
-/train.sh
 /slurm*
-/run.sh
+/ckpt

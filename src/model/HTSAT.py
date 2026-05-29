@@ -102,6 +102,16 @@ class HTSAT(pl.LightningModule):
         self.outputs["logit"] = logit if self.outputs["logit"] is None else torch.cat((self.outputs["logit"],logit),dim=0)
         self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
         return loss
+    
+    def test_step(self, batch, batch_idx):
+        log_mel = batch["log_mel"]
+        target = batch["target"]
+        logit = self(log_mel)
+        loss = F.binary_cross_entropy_with_logits(logit,target)
+        # 累积日志
+        self.outputs["logit"] = logit if self.outputs["logit"] is None else torch.cat((self.outputs["logit"],logit),dim=0)
+        self.outputs["target"] = target if self.outputs["target"] is None else torch.cat((self.outputs["target"],target),dim=0)
+        return loss
 
     def configure_optimizers(self):
         # 1. 优化器配置 (AdamW)
@@ -177,23 +187,43 @@ class HTSAT(pl.LightningModule):
             logging.getLogger("lightning.pytorch").info(
                 f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
             )
-        """
-        validate_map = {
-            "9->9" : [],
-            "9->10" : [],
-            "10->10" : []
+            
+    def on_test_epoch_start(self):
+        self.outputs = {
+            "logit" : None,
+            "target" : None
         }
-        y_true=np.argmax(target,1)
-        y_pred=np.argmax(y,1)
-        for index in range(y.shape[0]):
-            if y_true[index] == 9 and y_pred[index] == 9:
-                validate_map["9->9"].append(index)
-            if y_true[index] == 9 and y_pred[index] == 10:
-                validate_map["9->10"].append(index)
-            if y_true[index] == 10 and y_pred[index] == 10:
-                validate_map["10->10"].append(index)
-                
+    def on_test_epoch_end(self):
+        logit = self.outputs["logit"]
+        target = self.outputs["target"]
+
+        loss = F.binary_cross_entropy_with_logits(logit, target)
+
+        # numpy
+        y = torch.sigmoid(logit).flatten(0,1).float().detach().cpu().numpy()
+        target = target.flatten(0,1).float().detach().cpu().numpy().astype(int)
+
+        # calculate
+        acc = metrics.accuracy_score(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
+        confusion_matrix = metrics.confusion_matrix(y_true=np.argmax(target,1),y_pred=np.argmax(y,1))
+        
+        average_precision_scores = [
+            metrics.average_precision_score(target[:, k], y[:, k], average=None)
+            for k in range(self.class_num)
+        ]
+        roc_auc_scores = [
+            metrics.roc_auc_score(target[:, k], y[:, k], average=None)
+            for k in range(self.class_num)
+        ]
+        # self.log("val_simples",y.shape[0])
+        self.log("val_loss", loss, sync_dist=True)
+        self.log("val_acc", acc, sync_dist=True)
+        self.log("val_mAP", np.mean(average_precision_scores), sync_dist=True)
         logging.getLogger("lightning.pytorch").info(
-            f'{validate_map}'
-        )"""
+            f'Epoch{self.current_epoch:03d}\tvalidation_step\n{confusion_matrix}'
+        )
+        for k in range(self.class_num):
+            logging.getLogger("lightning.pytorch").info(
+                f'class_index:{k:03d}\tAP:{average_precision_scores[k]:.4f}\tauc:{roc_auc_scores[k]:.4f}'
+            )
     
