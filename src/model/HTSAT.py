@@ -172,7 +172,7 @@ class HTSAT(pl.LightningModule):
         # 1. 优化器配置 (AdamW)
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.parameters()),
-            lr=1e-5,  # 学习用-4,微调-5
+            lr=1e-4,  # 学习用-4,微调-5
             betas=(0.9, 0.999),
             eps=1e-8,
             weight_decay=0.05,  # 适用于Transformer类模型的权重衰减

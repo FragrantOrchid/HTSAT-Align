@@ -24,6 +24,16 @@ warnings.filterwarnings(
     message="No positive class found in y_true, recall is set to one for all thresholds.",
     category=UserWarning
 )
+warnings.filterwarnings(
+    "ignore", 
+    message="At least one mel filterbank has all zero values. The value for `n_mels` .*",
+    category=UserWarning
+)
+warnings.filterwarnings(
+    "ignore",
+    message="This DataLoader will create .* worker processes in total",
+    category=UserWarning
+)
 torch.set_float32_matmul_precision('medium')
 
 def dev_null_to_none(value):
@@ -103,12 +113,13 @@ logging.getLogger("lightning.pytorch").addHandler(
 
 
 # 冻结部分参数
-# for param in model.patch_embed.parameters():
-#     param.requires_grad = False
-# for param in model.swins_transformer.parameters():
-#     param.requires_grad = False
-# for param in model.linear.parameters():
-#     param.requires_grad = False
+for param in model.patch_embed.parameters():
+    param.requires_grad = False
+for param in model.swins_transformer.parameters():
+    param.requires_grad = False
+for param in model.linear.parameters():
+    param.requires_grad = False
+
 if args.mode == "train":
     print(f"load from {args.ckpt_path}")
     checkpoint = torch.load(args.ckpt_path)
