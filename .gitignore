@@ -1,9 +1,11 @@
 __pycache__
-/data
+/data/*
+!/data/speechcommand-v2/
+!/data/speechcommand-v2/**
 /export
 /temp
 /.vscode
 /testbench
-/train.sh
 /slurm*
 /run.sh
+/ckpt

@@ -139,26 +139,7 @@ class HTSAT(pl.LightningModule):
         # loss = F.binary_cross_entropy_with_logits(logit,target)
         loss = F.binary_cross_entropy_with_logits(
             input = logit,
-            target = target # ,
-            # pos_weight=torch.tensor(
-            #     [
-            #         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 
-            #         1.0, 1.0, 2.0, 2.0, 1.0, 1.0, 1.0,
-            #         1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,
-            #         1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,
-            #         1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ,1.0,
-            #     ]
-            # )
-
-            # pos_weight=torch.tensor(
-            #     [
-            #         1.80, 1.51, 0.71, 1.46, 1.42, 0.77, 0.80, 
-            #         0.37, 1.90, 1.93, 0.82, 0.78, 1.48, 1.40,
-            #         1.88, 0.80, 1.42, 0.76, 0.77, 0.82, 0.78,
-            #         0.77, 0.80, 0.76, 1.51, 0.78, 0.78, 0.82,
-            #         1.72, 0.78, 0.82, 1.88, 1.41, 0.75 ,0.74
-            #     ]
-            # ).to(self.device)
+            target = target
         )
         self.log("train_loss", loss, on_epoch=True, on_step=False)
         return loss
@@ -314,23 +295,4 @@ class HTSAT(pl.LightningModule):
                     logging.getLogger("lightning.pytorch").info(
                         f'Index={index},{y_true[index]} -> {y_pred[index]} : {self.trainer.test_dataloaders.dataset.get_filename(index)}'
                     )
-                    
-                    
-                    
-                    
-class PositionalEncoding(nn.Module):
-    """位置编码（若输入未包含时序信息）"""
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, d_model)
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.pe[:x.size(1)]
-        return self.dropout(x)
     
