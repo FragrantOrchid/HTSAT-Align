@@ -15,11 +15,11 @@
 
 nvidia-smi
 source ~/.bashrc
-conda activate HTAST
+conda activate HLHTSAT-v4
 export TMPDIR=~/.tmp
 export PYTHONDONTWRITEBYTECODE=1
 dataset=speechcommand-v2
-report_name="speechcommand-v2-GlobalTuning"
+report_name="speechcommand-v2-部分冻结"
 # 数据集配置文件
 config_file="dataset.conf"
 if [ ! -f "$config_file" ]; then
@@ -45,14 +45,16 @@ done < "$config_file"
 
 exp_name="[$(date +"%F-%T")]"
 exp_dir=./export/${exp_name}
-mkdir -p $exp_dir
+mkdir -p ~/data/Export/${exp_name}
+ln -sf ~/data/Export/${exp_name}  $exp_dir
+
 
 # 从部分冻结的模型开始训练
-# mode="train"
-# ckpt_path="./ckpt/htast-align-after-pretraining.ckpt" 
+mode="train"
+ckpt_path="./ckpt/htast-align-after-pretraining.ckpt" 
 # 测试整体微调后的模型
-mode="test"
-ckpt_path="./ckpt/htast-align-after-partial-freezing.ckpt"
+# mode="test"
+# ckpt_path="./ckpt/htast-align-after-partial-freezing.ckpt"
 
 command="python -u train.py \
 -train_file ${train_file} \
@@ -72,4 +74,4 @@ export PYTHONFAULTHANDLER=1
 
 echo $command
 # 执行命令并记录日志
-N_PROC=$(nproc)  $command 2>&1 | tee "$exp_dir/run.log"
+N_PROC=$(nproc) srun -u $command 2>&1 | tee "$exp_dir/run.log"

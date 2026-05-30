@@ -89,9 +89,9 @@ trainer = Trainer(
         ),
         BatchSizeFinder(
             mode="binsearch",      # "binsearch"二分法，"power"指数法
-            init_val=32,           # 起始测试值
-            steps_per_trial=3,     # 每个 batch size 跑多少个 step 来评估显存
-            max_trials=5,          # 最大尝试次数
+            init_val=256,           # 起始测试值
+            steps_per_trial=4,     # 每个 batch size 跑多少个 step 来评估显存
+            max_trials=16,          # 最大尝试次数
             batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
         ),
         TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
