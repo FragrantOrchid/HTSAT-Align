@@ -19,7 +19,7 @@ conda activate HLHTSAT-v4
 export TMPDIR=~/.tmp
 export PYTHONDONTWRITEBYTECODE=1
 dataset=speechcommand-v2
-report_name="speechcommand-v2-整体微调-0.3drop-续1"
+report_name="speechcommand-v2-headtest"
 # 数据集配置文件
 config_file="dataset.conf"
 if [ ! -f "$config_file" ]; then
@@ -50,10 +50,11 @@ ln -sf ~/data/Export/${exp_name}  $exp_dir
 
 # 从部分冻结的模型开始训练
 mode="train"
-ckpt_path="./ckpt/htast-align-after-partial-freezing.ckpt" 
+ckpt_path="./ckpt/htast-align-after-pretraining.ckpt"
+# ckpt_path="./ckpt/htast-align-after-partial-freezing.ckpt" 
 # 测试整体微调后的模型
 # mode="test"
-# ckpt_path="./export/[2026-06-01-01:34:15]/checkpoints/htsat-epoch=059-val_acc=0.9842.ckpt"
+# ckpt_path="./export/[2026-06-01-12:47:20]/checkpoints/htsat-epoch=022-val_loss=0.0027.ckpt"
 
 command="python -u train.py \
 -train_file ${train_file} \

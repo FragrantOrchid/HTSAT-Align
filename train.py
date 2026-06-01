@@ -61,7 +61,7 @@ data_module = HTSATdataset(
     test_file=args.test_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=32
+    batch_size=112
 )
 
 model = HTSAT(
@@ -93,7 +93,7 @@ trainer = Trainer(
             batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
         ),
         # TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
-        TQDMProgressBar(refresh_rate=128)
+        TQDMProgressBar(refresh_rate=32)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -112,21 +112,21 @@ logging.getLogger("lightning.pytorch").addHandler(
 
 
 # 冻结部分参数
-# for param in model.patch_embed.parameters():
-#     param.requires_grad = False
-# for param in model.swins_transformer.parameters():
-#     param.requires_grad = False
-# for param in model.linear.parameters():
-#     param.requires_grad = False
+for param in model.patch_embed.parameters():
+    param.requires_grad = False
+for param in model.swins_transformer.parameters():
+    param.requires_grad = False
+for param in model.linear.parameters():
+    param.requires_grad = False
 if args.mode == "train":
-    # print(f"load from {args.ckpt_path}")
-    # checkpoint = torch.load(args.ckpt_path)
-    # state_dict = checkpoint.get('state_dict', checkpoint)
-    # model = load_part_of_state_dict(model, state_dict, strict=False)
+    print(f"load from {args.ckpt_path}")
+    checkpoint = torch.load(args.ckpt_path)
+    state_dict = checkpoint.get('state_dict', checkpoint)
+    model = load_part_of_state_dict(model, state_dict, strict=False)
     trainer.fit(
         model,
         datamodule=data_module,
-        ckpt_path="./export/[2026-06-01-01:34:15]/checkpoints/htsat-epoch=064-val_loss=0.0026.ckpt"
+        ckpt_path=None
     )
 elif args.mode == "val":
     trainer.validate(
