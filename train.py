@@ -24,6 +24,16 @@ warnings.filterwarnings(
     message="No positive class found in y_true, recall is set to one for all thresholds.",
     category=UserWarning
 )
+warnings.filterwarnings(
+    "ignore", 
+    message="At least one mel filterbank has all zero values. The value for `n_mels` .*",
+    category=UserWarning
+)
+warnings.filterwarnings(
+    "ignore",
+    message="This DataLoader will create .* worker processes in total",
+    category=UserWarning
+)
 torch.set_float32_matmul_precision('medium')
 
 def dev_null_to_none(value):
@@ -80,11 +90,10 @@ trainer = Trainer(
         BatchSizeFinder(
             mode="binsearch",      # "binsearch"二分法，"power"指数法
             init_val=32,           # 起始测试值
-            steps_per_trial=3,     # 每个 batch size 跑多少个 step 来评估显存
-            max_trials=5,          # 最大尝试次数
             batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
         ),
-        TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
+        # TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
+        TQDMProgressBar(refresh_rate=128)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -110,14 +119,14 @@ logging.getLogger("lightning.pytorch").addHandler(
 # for param in model.linear.parameters():
 #     param.requires_grad = False
 if args.mode == "train":
-    print(f"load from {args.ckpt_path}")
-    checkpoint = torch.load(args.ckpt_path)
-    state_dict = checkpoint.get('state_dict', checkpoint)
-    model = load_part_of_state_dict(model, state_dict, strict=False)
+    # print(f"load from {args.ckpt_path}")
+    # checkpoint = torch.load(args.ckpt_path)
+    # state_dict = checkpoint.get('state_dict', checkpoint)
+    # model = load_part_of_state_dict(model, state_dict, strict=False)
     trainer.fit(
         model,
         datamodule=data_module,
-        ckpt_path=None
+        ckpt_path="./export/[2026-06-01-01:34:15]/checkpoints/htsat-epoch=064-val_loss=0.0026.ckpt"
     )
 elif args.mode == "val":
     trainer.validate(

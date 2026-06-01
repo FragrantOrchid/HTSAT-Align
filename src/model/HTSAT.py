@@ -48,21 +48,21 @@ class HTSAT(pl.LightningModule):
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
         self.swins_transformer = nn.Sequential(
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.00),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.02),
             PatchMergingV2(dim=96),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.04),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.06),
             PatchMergingV2(dim=96*2),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.08),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.10),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.12),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.14),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.16),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.18),
             PatchMergingV2(dim=96*4),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.22),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.26),
             PatchMergingV2(dim=96*8)
         )
         
@@ -95,13 +95,15 @@ class HTSAT(pl.LightningModule):
             hidden_size=96*16,
             num_layers=2,
             bidirectional=True,
-            batch_first=True
+            batch_first=True,
+            dropout=0.3
         )
         # self.proj = nn.Sequential(
         #     nn.Linear(2 * 96, 35, bias=True),
         #     nn.GELU(),               # 或 ReLU/Tanh
         #     nn.Dropout(0.0)
         # )
+        self.proj_drop = nn.Dropout(0.3)
         self.proj = nn.Linear(
             in_features=96*32,
             out_features=self.class_num
@@ -119,8 +121,18 @@ class HTSAT(pl.LightningModule):
         # lstm_input = self.linear(swin_output.squeeze(1)) # B, W , C'
         # lstm_input = torch.sigmoid(lstm_input)
         lstm_input = swin_output.squeeze(1)
+        if self.training:
+            # 训练时随机截断（如 40% 概率被截断）
+            if torch.rand(1).item() < 0.4:
+                lstm_input, mask, _ = self.random_truncate(lstm_input)
+            else:
+                mask = None
+        else:
+            mask = None  # 推理时正常输入，不截断
         lstm_out, (h_n, c_n) = self.lstm(lstm_input)
 
+
+        # logit = self.proj(self.proj_drop(torch.cat([h_n[-2],h_n[-1]],dim=-1)))
         logit = self.proj(torch.cat([h_n[-2],h_n[-1]],dim=-1))
         # phoneme_logit = self.phoneme_pool(phoneme_event.permute(0,2,1)).squeeze(-1)
 
@@ -277,10 +289,10 @@ class HTSAT(pl.LightningModule):
             metrics.roc_auc_score(target[:, k], y[:, k], average=None)
             for k in range(self.class_num)
         ]
-        self.log("val_simples",y.shape[0],sync_dist=True)
-        self.log("val_loss",loss,sync_dist=True)
-        self.log("val_acc",acc,sync_dist=True)
-        self.log("val_mAP",np.mean(average_precision_scores),sync_dist=True)
+        self.log("test_simples",y.shape[0],sync_dist=True)
+        self.log("test_loss",loss,sync_dist=True)
+        self.log("test_acc",acc,sync_dist=True)
+        self.log("test_mAP",np.mean(average_precision_scores),sync_dist=True)
         logging.getLogger("lightning.pytorch").info(
             f'Epoch{self.current_epoch:03d}\tvalidation_step\n{confusion_matrix}'
         )
@@ -296,3 +308,18 @@ class HTSAT(pl.LightningModule):
                         f'Index={index},{y_true[index]} -> {y_pred[index]} : {self.trainer.test_dataloaders.dataset.get_filename(index)}'
                     )
     
+    def random_truncate(self, x, min_keep_ratio=0.4, max_keep_ratio=1.0):
+        """
+        x: (B, W, C) - swin_output.squeeze(1) 后的 LSTM 输入
+        返回截断后的序列和对应的 mask
+        """
+        B, W, C = x.shape
+        # 为每个样本随机生成保留长度
+        keep_ratios = torch.empty(B).uniform_(min_keep_ratio, max_keep_ratio).to(x.device)
+        keep_lengths = (keep_ratios * W).long().clamp(min=1)  # 至少保留 1 帧
+
+        # 生成 mask
+        mask = torch.arange(W, device=x.device).unsqueeze(0) < keep_lengths.unsqueeze(1)  # (B, W)
+        # 将截断部分置零（或填充特定值）
+        x_truncated = x * mask.unsqueeze(-1)
+        return x_truncated, mask, keep_lengths
