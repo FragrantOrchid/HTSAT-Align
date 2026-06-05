@@ -112,12 +112,12 @@ logging.getLogger("lightning.pytorch").addHandler(
 
 
 # 冻结部分参数
-for param in model.patch_embed.parameters():
-    param.requires_grad = False
-for param in model.swins_transformer.parameters():
-    param.requires_grad = False
-for param in model.linear.parameters():
-    param.requires_grad = False
+# for param in model.patch_embed.parameters():
+#     param.requires_grad = False
+# for param in model.swins_transformer.parameters():
+#     param.requires_grad = False
+# for param in model.linear.parameters():
+#     param.requires_grad = False
 if args.mode == "train":
     print(f"load from {args.ckpt_path}")
     checkpoint = torch.load(args.ckpt_path)
