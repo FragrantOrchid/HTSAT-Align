@@ -47,28 +47,31 @@ class HTSAT(pl.LightningModule):
         # all use B,H,W,C 
         # Input: B,16,sound_length*160,96
         # Output: B,1,sound_length*10,96*16
+        # B,H,W,C
         self.swins_transformer = nn.Sequential(
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.00),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.02),
             PatchMergingV2(dim=96),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.04),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.06),
             PatchMergingV2(dim=96*2),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.08),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.10),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.12),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.14),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.16),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.18),
             PatchMergingV2(dim=96*4),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.22),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.26),
             PatchMergingV2(dim=96*8)
         )
-        
-        self.linear = nn.Linear(
-            in_features=96*16,
-            out_features=47
+        self.linear = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(
+                in_features=96*16,
+                out_features=self.class_num
+            )
         )
         # BCHW
         # 使用简单卷积
@@ -95,17 +98,23 @@ class HTSAT(pl.LightningModule):
             hidden_size=96*16,
             num_layers=2,
             bidirectional=True,
-            batch_first=True
+            batch_first=True,
+            dropout=0.3
         )
         # self.proj = nn.Sequential(
         #     nn.Linear(2 * 96, 35, bias=True),
         #     nn.GELU(),               # 或 ReLU/Tanh
         #     nn.Dropout(0.0)
         # )
-        self.proj = nn.Linear(
-            in_features=96*32,
-            out_features=self.class_num
+        self.proj = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(
+                in_features=96*32,
+                out_features=self.class_num
+            )
         )
+        
+
         # 
         # self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
         

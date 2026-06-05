@@ -94,7 +94,7 @@ trainer = Trainer(
             max_trials=16,          # 最大尝试次数
             batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
         ),
-        TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
+        TQDMProgressBar(refresh_rate=16)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
