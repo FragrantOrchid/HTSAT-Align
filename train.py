@@ -12,6 +12,7 @@ import logging
 import numpy as np
 import warnings
 from sklearn.exceptions import UndefinedMetricWarning
+from util.LoadState import load_part_of_state_dict
 np.set_printoptions(
     threshold=np.inf,
     precision=4,
@@ -93,7 +94,8 @@ trainer = Trainer(
             max_trials=5,          # 最大尝试次数
             batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
         ),
-        TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
+        # TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
+        TQDMProgressBar(refresh_rate=128)
     ],
     log_every_n_steps=10,
     enable_progress_bar=True,
@@ -110,6 +112,11 @@ logging.getLogger("lightning.pytorch").addHandler(
 )
 
 if args.mode == "train":
+    if args.ckpt_path is not None:
+        print(f"load from {args.ckpt_path}")
+        checkpoint = torch.load(args.ckpt_path)
+        state_dict = checkpoint.get('state_dict', checkpoint)
+        model = load_part_of_state_dict(model, state_dict, strict=False)
     trainer.fit(
         model,
         datamodule=data_module,

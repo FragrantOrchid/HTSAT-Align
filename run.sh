@@ -15,11 +15,11 @@
 
 nvidia-smi
 source ~/.bashrc
-conda activate HTAST
+conda activate HLHTSAT-v4
 export TMPDIR=~/.tmp
 export PYTHONDONTWRITEBYTECODE=1
 dataset=librispeech-alignment-BIES-360
-report_name="librispeech-alignment-BIES-360-PreTraining"
+report_name="librispeech-alignment-BIES-360-PreTraining-testdropout"
 # 数据集配置文件
 config_file="dataset.conf"
 if [ ! -f "$config_file" ]; then
@@ -51,8 +51,10 @@ mkdir -p $exp_dir
 # mode="train"
 # ckpt_path="/dev/null" 
 # 测试整体微调后的模型
-mode="test"
-ckpt_path="./ckpt/htast-align-after-pretraining.ckpt"
+# mode="test"
+# ckpt_path="./ckpt/htast-align-after-pretraining.ckpt"
+mode="train"
+ckpt_path="/dev/null"
 
 command="python -u train.py \
 -train_file ${train_file} \

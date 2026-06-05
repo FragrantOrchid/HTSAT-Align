@@ -28,7 +28,7 @@ class HTSAT(pl.LightningModule):
         # )
         self.spec_aug = GaussianSpecAugment(
             patch_size=(8,16),
-            mask_ratio=0.25,
+            mask_ratio=0.50,
             cluster_strength=(0.35,0.50)
         )
         # B,C,H,W() -> B,H,W,C
@@ -44,31 +44,31 @@ class HTSAT(pl.LightningModule):
         
         # B,H,W,C
         self.swins_transformer = nn.Sequential(
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.00),
+            SwinTransformerBlockV2(dim=96,num_heads=4,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.02),
             PatchMergingV2(dim=96),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.04),
+            SwinTransformerBlockV2(dim=96*2,num_heads=8,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.06),
             PatchMergingV2(dim=96*2),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.08),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.10),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.12),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.14),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.16),
+            SwinTransformerBlockV2(dim=96*4,num_heads=16,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.18),
             PatchMergingV2(dim=96*4),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0]),
-            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3]),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[0,0],stochastic_depth_prob=0.22),
+            SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.26),
             PatchMergingV2(dim=96*8)
         )
-        self.linear = nn.Linear(
-            in_features=96*16,
-            out_features=self.class_num
+        self.linear = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(
+                in_features=96*16,
+                out_features=self.class_num
+            )
         )
         
-        self.phoneme_pool = nn.AdaptiveMaxPool1d(1)
-        
-
     def forward(self,x):
         # x: B,C,H,W
         patch_tokens = self.patch_embed(x) # B,C,H,W
