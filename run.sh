@@ -19,7 +19,7 @@ conda activate HLHTSAT-v4
 export TMPDIR=~/.tmp
 export PYTHONDONTWRITEBYTECODE=1
 dataset=librispeech-alignment-BIES-360
-report_name="librispeech-alignment-BIES-360-PreTraining-testdropout"
+report_name="librispeech-alignment-BIES-360-PreTraining-testdropout-续3"
 # 数据集配置文件
 config_file="dataset.conf"
 if [ ! -f "$config_file" ]; then
@@ -45,11 +45,12 @@ done < "$config_file"
 
 exp_name="[$(date +"%F-%T")]"
 exp_dir=./export/${exp_name}
-mkdir -p $exp_dir
+mkdir -p ~/data/Export/${exp_name}
+ln -sf ~/data/Export/${exp_name}  $exp_dir
 
 # 从部分冻结的模型开始训练
-# mode="train"
-# ckpt_path="/dev/null" 
+mode="train"
+ckpt_path="./export/[2026-06-07-23:47:32]/checkpoints/htsat-epoch=051:latest.ckpt" 
 # 测试整体微调后的模型
 # mode="test"
 # ckpt_path="./ckpt/htast-align-after-pretraining.ckpt"

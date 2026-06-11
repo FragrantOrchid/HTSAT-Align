@@ -61,7 +61,7 @@ data_module = HTSATdataset(
     test_file=args.test_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=32
+    batch_size=124
 )
 
 model = HTSAT(
@@ -87,13 +87,19 @@ trainer = Trainer(
             save_top_k=5,
             mode="max"
         ),
-        BatchSizeFinder(
-            mode="binsearch",      # "binsearch"二分法，"power"指数法
-            init_val=32,           # 起始测试值
-            steps_per_trial=3,     # 每个 batch size 跑多少个 step 来评估显存
-            max_trials=5,          # 最大尝试次数
-            batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
+        ModelCheckpoint(
+            save_last=True,                              # 总是保存最后一个 epoch
+            dirpath=os.path.join(args.export_path, "checkpoints"),
+            filename="htsat-{epoch:03d}:latest",                       # 固定名称，方便推理时调用
+            save_top_k=1
         ),
+        # BatchSizeFinder(
+        #     mode="binsearch",      # "binsearch"二分法，"power"指数法
+        #     init_val=32,           # 起始测试值
+        #     steps_per_trial=3,     # 每个 batch size 跑多少个 step 来评估显存
+        #     max_trials=5,          # 最大尝试次数
+        #     batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
+        # ),
         # TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
         TQDMProgressBar(refresh_rate=128)
     ],
@@ -112,15 +118,15 @@ logging.getLogger("lightning.pytorch").addHandler(
 )
 
 if args.mode == "train":
-    if args.ckpt_path is not None:
-        print(f"load from {args.ckpt_path}")
-        checkpoint = torch.load(args.ckpt_path)
-        state_dict = checkpoint.get('state_dict', checkpoint)
-        model = load_part_of_state_dict(model, state_dict, strict=False)
+    # if args.ckpt_path is not None:
+    #     print(f"load from {args.ckpt_path}")
+    #     checkpoint = torch.load(args.ckpt_path)
+    #     state_dict = checkpoint.get('state_dict', checkpoint)
+    #     model = load_part_of_state_dict(model, state_dict, strict=False)
     trainer.fit(
         model,
         datamodule=data_module,
-        ckpt_path=args.ckpt_path
+        ckpt_path="./export/[2026-06-07-23:47:32]/checkpoints/htsat-epoch=051:latest.ckpt"
     )
 elif args.mode == "val":
     trainer.validate(
