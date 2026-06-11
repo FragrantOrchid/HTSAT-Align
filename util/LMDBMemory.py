@@ -34,6 +34,8 @@ def get_env(name: str, location : str = "$HOME/.cache/LMDBMemory"):
 def cache(env: lmdb.Environment, unique_keys: List[str]):
     def decorator(func):
         def wrapper(*args, **kwargs):
+            if env is None:
+                return func(*args, **kwargs)
             # 获取函数签名
             sig = inspect.signature(func)
             bound_args = sig.bind(*args, **kwargs)

@@ -66,13 +66,13 @@ class HTSAT(pl.LightningModule):
             SwinTransformerBlockV2(dim=96*8,num_heads=32,window_size=[7,7],shift_size=[3,3],stochastic_depth_prob=0.26),
             PatchMergingV2(dim=96*8)
         )
-        self.linear = nn.Sequential(
-            nn.Dropout(0.3),
-            nn.Linear(
-                in_features=96*16,
-                out_features=self.class_num
-            )
-        )
+        # self.linear = nn.Sequential(
+        #     nn.Dropout(0.3),
+        #     nn.Linear(
+        #         in_features=96*16,
+        #         out_features=self.class_num
+        #     )
+        # )
         # BCHW
         # 使用简单卷积
         # self.trans = nn.Sequential(

@@ -30,7 +30,7 @@ class HTSATdataset(pl.LightningDataModule):
             dataset,
             batch_size=self.batch_size,  # 设置 batch_size
             shuffle=True,  # 训练集需要 shuffle
-            num_workers=self.n_proc,  # 多线程加载数据
+            num_workers=self.n_proc*2,  # 多线程加载数据
             pin_memory=True,  # 如果使用 GPU，可以加速数据传输
             prefetch_factor = 2
         )
@@ -40,7 +40,7 @@ class HTSATdataset(pl.LightningDataModule):
             dataset,
             batch_size=self.batch_size,  # 验证集 batch_size 可以相同或不同
             shuffle=False,  # 验证集不需要 shuffle
-            num_workers=self.n_proc,
+            num_workers=self.n_proc*2,
             pin_memory=True,
             prefetch_factor = 2
         )
@@ -127,7 +127,8 @@ class HTSATdataset(pl.LightningDataModule):
             # env = self.env
 
             # This is a version that won't freeze, but the env needs to be reimplemented every time.
-            env = get_env(name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
+            # env = get_env(name = hashlib.sha256(self.datafile.encode("utf-8")).hexdigest())
+            env = None
             # 辅助变量
             filelabels = self.data[index]['labels']
             result = {}
@@ -152,7 +153,7 @@ class HTSATdataset(pl.LightningDataModule):
                 ),
                 dtype=torch.float32
             )
-
-            env.close()
+            if env is not None:
+                env.close()
             return result
 
