@@ -50,11 +50,11 @@ ln -sf ~/data/Export/${exp_name}  $exp_dir
 
 # 从部分冻结的模型开始训练
 # mode="train"
-# ckpt_path="./export/[2026-06-05-14:24:53]/checkpoints/htsat-epoch=024-val_loss=0.0045.ckpt"
+# ckpt_path="./export/[2026-06-11-19:12:22]/checkpoints/htsat-epoch=069-val_loss=0.0039.ckpt"
 # ckpt_path="./ckpt/htast-align-after-partial-freezing.ckpt" 
 # 测试整体微调后的模型
 mode="test"
-ckpt_path="./export/[2026-06-05-15:54:00]/checkpoints/htsat-epoch=019-val_loss=0.0027.ckpt"
+ckpt_path="./export/[2026-06-11-23:57:17]/checkpoints/htsat-epoch=066-val_acc=0.9843.ckpt"
 
 command="python -u train.py \
 -train_file ${train_file} \

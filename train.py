@@ -61,7 +61,7 @@ data_module = HTSATdataset(
     test_file=args.test_file,
     label_csv=args.label_csv,
     sound_length=args.sound_length,
-    batch_size=112
+    batch_size=128
 )
 
 model = HTSAT(
@@ -87,11 +87,11 @@ trainer = Trainer(
             save_top_k=5,
             mode="max"
         ),
-        BatchSizeFinder(
-            mode="binsearch",      # "binsearch"二分法，"power"指数法
-            init_val=32,           # 起始测试值
-            batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
-        ),
+        # BatchSizeFinder(
+        #     mode="binsearch",      # "binsearch"二分法，"power"指数法
+        #     init_val=32,           # 起始测试值
+        #     batch_arg_name="batch_size" # 模型或DataModule中对应的参数名
+        # ),
         # TQDMProgressBar(refresh_rate=data_module.train_dataloader().__len__()//10+1)
         TQDMProgressBar(refresh_rate=32)
     ],
