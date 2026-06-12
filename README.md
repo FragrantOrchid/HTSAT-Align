@@ -2,6 +2,8 @@
 ## 最终数据 (均在 Google Speech Commands v2 数据集上测试)
 - ACC=0.9846(Without Dropout)
 - ACC=0.9854(With Dropout)
+
+**由于Paperswithcode关闭，我并不能确定当前是否有比本项目在Google Speech Command V2上准确率更高的模型，可以确定的是本项目准确率比Paperswithcode关闭前的SOTA高**
 ## 不同分支作用
 - LibriSpeechAlignmentsPretrain 使用LibriSpeech-ALignment数据集进行预训练
 - SpeechCommandV2-PartialFreezing 使用SpeechCommand V2数据集上，冻结部分参数进行训练
