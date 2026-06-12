@@ -1,7 +1,5 @@
 __pycache__
-/data/*
-!/data/speechcommand-v2/
-!/data/speechcommand-v2/**
+/data
 /export
 /temp
 /.vscode
