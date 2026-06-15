@@ -23,6 +23,32 @@
 - 预训练数据本体：https://huggingface.co/datasets/gilkeyio/librispeech-alignments
 - Speech Command V2数据：https://storage.cloud.google.com/download.tensorflow.org/data/speech_commands_v0.02.tar.gz
 - 检查点：https://github.com/FragrantOrchid/HTSAT-Align/releases/tag/Checkpoint
+
+最终文件结构如下文所示：
+```
+HTSAT-align
+├── ckpt
+│   ├── htast-align-after-global-tuning.ckpt
+│   ├── htast-align-after-partial-freezing.ckpt
+│   ├── htast-align-after-pretraining.ckpt
+│   ├── htast-align-after-global-tuning-dropout.ckpt
+│   ├── htast-align-after-partial-freezing-dropout.ckpt
+│   └── htast-align-after-pretraining-dropout.ckpt
+├── data
+│   ├── LibriSpeech-Alignment-BIES
+│   │   ├── class.csv
+│   │   ├── dev-clean.csv
+│   │   ├── test-clean.csv
+│   │   ├── train-clean-100.csv
+│   │   ├── train-clean-360.csv
+│   │   └── train-other-500.csv
+│   └── speechcommand-v2
+│        ├── class.csv
+│        ├── eval.json
+│        ├── test.json
+│        └── train.json
+......
+```
 ### 测试
 ```git checkout SpeechCommandV2-GlobalTuning && bash run.sh```
 ### 从头开始训练
