@@ -15,3 +15,29 @@
 训练使用数据的索引，文件名均与原始开源数据集中命名相同
 ### Export
 训练中的全部日志，可从此查看模型训练所使用的时间，预训练阶段由于集群限制分割成多个部分。
+## 如何使用
+### 准备环境
+```conda env create -f environment.yml -n <your_new_eventment_name>```
+### 准备数据
+- 训练数据索引：https://github.com/FragrantOrchid/HTSAT-Align/releases/tag/Datafile
+- 预训练数据本体：https://huggingface.co/datasets/gilkeyio/librispeech-alignments
+- Speech Command V2数据：https://storage.cloud.google.com/download.tensorflow.org/data/speech_commands_v0.02.tar.gz
+- 检查点：https://github.com/FragrantOrchid/HTSAT-Align/releases/tag/Checkpoint
+### 测试
+```git checkout SpeechCommandV2-GlobalTuning && bash run.sh```
+### 从头开始训练
+将bash.sh中形如
+```
+# mode="train"
+# ckpt_path="*.ckpt" 
+mode="test"
+ckpt_path="./ckpt/*.ckpt"
+```
+修改为形如
+```
+mode="train"
+ckpt_path="*.ckpt" 
+# mode="test"
+# ckpt_path="./ckpt/*.ckpt"
+```
+的形式
